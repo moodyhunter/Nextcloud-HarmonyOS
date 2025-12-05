@@ -98,7 +98,7 @@ export async function CreatePath(path: string): Promise<number> {
     return respCode;
 }
 
-export async function UploadFile(filename: string, mTime: number, path: string, fd: number): Promise<number> {
+export async function UploadFile(filename: string, mTime: number, path: string, uri: string): Promise<number> {
     let extraHeaders = new Map<string, string>();
     extraHeaders.set('X-OC-MTime', `${Math.round(mTime / 1000)}`);
     let session = CreateSession(extraHeaders);
@@ -111,12 +111,13 @@ export async function UploadFile(filename: string, mTime: number, path: string, 
         }
     }
 
-    let stream: fs.Stream;
+
+    let file: fs.File;
     try {
-        stream = await fs.fdopenStream(fd, "r");
-        Logger.Debug(TAG, "File stream opened");
+        file = await fs.open(uri);
+        Logger.Debug(TAG, "File opened");
     } catch (error) {
-        Logger.Error(TAG, `failed to create readonly stream: ${JSON.stringify(error)}`);
+        Logger.Error(TAG, `failed to create readonly file: ${JSON.stringify(error)}`);
         throw error as Error;
     }
 
@@ -125,7 +126,7 @@ export async function UploadFile(filename: string, mTime: number, path: string, 
 
     let ret = -1;
     try {
-        let resp = await session.put(fullpath, new rcp.UploadFromStream(stream));
+        let resp = await session.put(fullpath, new rcp.UploadFromFile(file));
         Logger.Info(TAG, "Upload response: " + resp.statusCode);
         ret = resp.statusCode;
     } catch (e) {
@@ -133,9 +134,9 @@ export async function UploadFile(filename: string, mTime: number, path: string, 
     }
 
     try {
-        stream.closeSync();
+        await fs.close(file);
     } catch (error) {
-        Logger.Warn(TAG, `failed to close the stream`);
+        Logger.Warn(TAG, `failed to close the file: ${JSON.stringify(error)}`);
     }
     session.close();
     return ret;

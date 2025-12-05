@@ -83,7 +83,7 @@ export class PhotoItem {
         let message = "";
         let fd = await this.innerAsset.getReadOnlyFd();
         let uploadResult = await UploadFile(this.displayName, this.dateTakenMs, path, fd);
-        this.innerAsset.close(fd);
+        let uploadResult = await UploadFile(this.displayName, this.dateTakenMs, path, this.uri);
         if (uploadResult !== 201 && uploadResult !== 204) {
             message = `Failed: ${this.displayName}: ${uploadResult}`;
             this.uploadStatus = UploadStatus.Failed;
