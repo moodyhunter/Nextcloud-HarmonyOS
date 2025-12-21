@@ -1,5 +1,3 @@
-const DEFAULT_PATH_FORMAT = 'yyyy/MM/'
-
 export function FormatBytes(bytes: string) {
     let bytesNum = parseInt(bytes);
     let units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -12,13 +10,13 @@ export function FormatBytes(bytes: string) {
     return bytesNum.toFixed(2) + ' ' + units[i];
 }
 
-export function TimeToPath(date: Date, pathFormat: string = DEFAULT_PATH_FORMAT) {
+export function FormatTime(date: Date, format: string) {
     // make sure the path format ends with a slash
-    if (!pathFormat.endsWith('/')) {
-        pathFormat += '/';
+    if (!format.endsWith('/')) {
+        format += '/';
     }
 
-    let result = pathFormat;
+    let result = format;
     result = result.replace('yyyy', date.getFullYear().toString());
     result = result.replace('MM', (date.getMonth() + 1).toString().padStart(2, '0'));
     result = result.replace('dd', date.getDate().toString().padStart(2, '0'));

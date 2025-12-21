@@ -25,6 +25,9 @@
             "EntryAbility"
           ]
         }
+      },
+      {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
       }
     ],
     "deviceTypes": [
@@ -55,6 +58,9 @@
               "action.system.home"
             ]
           }
+        ],
+        "backgroundModes": [
+          "dataTransfer"
         ]
       }
     ],

@@ -4,13 +4,24 @@ import { Logger, NCommon } from 'nextcloud';
 import { Constants, FolderViewMode } from '../utils/Common';
 import { GlobalStorage } from '../utils/GlobalStorage';
 
+import { Notification } from '../utils/NotificationManager';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+
 const TAG = 'EntryAbility';
 
 export default class EntryAbility extends UIAbility {
-    onCreate(want: Want, launchParam: AbilityConstant.LaunchParam) {
-        this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+    id: number = 0;
+
+    async onCreate(_want: Want, _launchParam: AbilityConstant.LaunchParam) {
         Logger.Info(TAG, 'Ability onCreate');
+        try {
+            this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+        } catch (error) {
+            Logger.Error(TAG, `failed to set color mode!`);
+        }
         NCommon.Initialise(this.context);
+        GlobalStorage.pHelper = photoAccessHelper.getPhotoAccessHelper(this.context);
+        await Notification.startNotification(this.context);
     }
 
     onDestroy() {
@@ -35,15 +46,21 @@ export default class EntryAbility extends UIAbility {
         Logger.Info(TAG, 'Main window created.');
     }
 
+
     onWindowStageDestroy() {
         Logger.Info(TAG, 'Main window is destroyed, release UI related resources');
     }
 
-    onForeground() {
+
+    async onForeground() {
         Logger.Info(TAG, 'Ability has brought to foreground');
     }
 
-    onBackground() {
+    async onWillBackground() {
         Logger.Info(TAG, 'Ability has back to background');
     }
-}
+
+    onMemoryLevel(level: AbilityConstant.MemoryLevel): void {
+        Logger.Info(TAG, `onMemoryLevel: level = ${AbilityConstant.MemoryLevel[level]}`);
+    }
+};

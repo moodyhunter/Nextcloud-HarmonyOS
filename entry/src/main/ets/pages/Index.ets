@@ -6,6 +6,9 @@ import { LoginPage } from './LoginPage';
 import { SettingsPage } from './SettingsPage';
 import { FolderPage } from './FolderPage';
 import { Constants, FolderViewMode } from '../utils/Common';
+import { PermissionManager } from '../utils/PermissionManager';
+import { UploadScheduler } from '../utils/UploadScheduler';
+import { PhotoMonitor } from '../utils/PhotoMonitor';
 
 const TAG = "Page-Index";
 
@@ -50,8 +53,15 @@ struct Index {
         }
     }
 
-    aboutToAppear(): void {
+    async aboutToAppear() {
         Logger.Info(TAG, `aboutToAppear`);
+        let context = this.getUIContext().getHostContext()!;
+        let result1 = await PermissionManager.RequestPermission(context, 'ohos.permission.READ_IMAGEVIDEO');
+        Logger.Info(TAG, `Request permission result: ${result1}`);
+        let result2 = await PermissionManager.RequestPermission(context, 'ohos.permission.MEDIA_LOCATION');
+        Logger.Info(TAG, `Request permission result: ${result2}`);
+        UploadScheduler.initialize();
+        PhotoMonitor.beginMonitorPhotoChange();
     }
 
     async doLogin() {

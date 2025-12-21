@@ -1,5 +1,5 @@
 import { LoginProcess, NCommon } from 'nextcloud';
-import { LengthMetrics, promptAction } from '@kit.ArkUI';
+import { LengthMetrics } from '@kit.ArkUI';
 import { Logger } from 'nextcloud/src/main/ets/Logger';
 import { webview } from '@kit.ArkWeb';
 

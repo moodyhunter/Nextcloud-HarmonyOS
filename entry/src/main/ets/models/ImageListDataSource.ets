@@ -7,6 +7,11 @@ export class ImageListDataSource extends BasicDataSource<PhotoItem> {
         super();
     }
 
+    public prependAsset(asset: PhotoItem) {
+        this.entries.unshift(asset);
+        this.notifyDataAdd(0);
+    }
+
     public addAsset(asset: PhotoItem) {
         this.entries.push(asset);
         this.notifyDataAdd(this.entries.length - 1);

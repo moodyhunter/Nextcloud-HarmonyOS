@@ -1,40 +1,34 @@
 import { Logger, NCommon } from 'nextcloud';
-import { PermissionManager } from '../utils/PermissionManager';
-import { AddAssetResult, Category } from '../models/Category';
+import { Category } from '../models/Category';
 import { LengthMetrics } from '@kit.ArkUI';
-import { photoAccessHelper as PHelper } from '@kit.MediaLibraryKit';
-import { dataSharePredicates } from '@kit.ArkData';
 import { PhotoItem, UploadStatus } from '../models/PhotoItem';
+import { UploadScheduler } from '../utils/UploadScheduler';
 
 const TAG = "Page-UploadPage"
-
-
-const FETCH_OPTIONS: PHelper.FetchOptions = {
-    fetchColumns: [
-        PHelper.PhotoKeys.URI,
-        PHelper.PhotoKeys.PHOTO_TYPE,
-        PHelper.PhotoKeys.PHOTO_SUBTYPE,
-        PHelper.PhotoKeys.DISPLAY_NAME,
-        PHelper.PhotoKeys.DATE_TAKEN,
-        PHelper.PhotoKeys.DATE_ADDED_MS,
-        PHelper.PhotoKeys.SIZE,
-        PHelper.PhotoKeys.WIDTH,
-        PHelper.PhotoKeys.HEIGHT,
-        PHelper.PhotoKeys.TITLE,
-        PHelper.PhotoKeys.COVER_POSITION,
-        PHelper.PhotoKeys.DYNAMIC_RANGE_TYPE,
-        PHelper.PhotoKeys.DETAIL_TIME,
-        PHelper.PhotoKeys.DATE_TAKEN_MS,
-    ],
-    predicates: new dataSharePredicates.DataSharePredicates().orderByDesc(PHelper.PhotoKeys.DATE_TAKEN),
-};
 
 
 @Component
 struct PhotoView {
     @ObjectLink asset: PhotoItem;
-    @Prop category: Category;
+    @ObjectLink category: Category;
     @State private thumbnail: PixelMap | null = null;
+
+    getUploadColor(status: UploadStatus): Color {
+        switch (status) {
+            case UploadStatus.Uploaded:
+                return Color.Green;
+            case UploadStatus.Uploading:
+                return Color.Yellow;
+            case UploadStatus.Failed:
+                return Color.Red;
+            case UploadStatus.None:
+                return Color.Gray;
+            case UploadStatus.Existed:
+                return Color.Blue;
+            default:
+                return Color.Gray;
+        }
+    }
 
     build() {
         Stack() {
@@ -52,12 +46,7 @@ struct PhotoView {
         .height(100)
         .width(100)
         .borderWidth(3)
-        .borderColor(
-            (this.asset.uploadStatus == UploadStatus.Uploaded) ? Color.Green :
-                (this.asset.uploadStatus == UploadStatus.Uploading) ? Color.Yellow :
-                    (this.asset.uploadStatus == UploadStatus.Failed) ? Color.Red :
-                        (this.asset.uploadStatus == UploadStatus.None) ? Color.Gray :
-                            (this.asset.uploadStatus == UploadStatus.Existed) ? Color.Blue : Color.Gray)
+        .borderColor(this.getUploadColor(this.asset.uploadStatus))
         .onClick(async () => {
             await this.asset.upload(NCommon.Preference.baseUploadDirectory + this.category.location);
         })
@@ -117,17 +106,7 @@ struct PhotosGridView {
 @Preview
 @Component
 export struct UploadPage {
-    @State private categories: Category[] = [];
-
-    async aboutToAppear() {
-        let context = this.getUIContext().getHostContext()!;
-        let result1 = await PermissionManager.RequestPermission(context, 'ohos.permission.READ_IMAGEVIDEO');
-        Logger.Info(TAG, `Request permission result: ${result1}`);
-        let result2 = await PermissionManager.RequestPermission(context, 'ohos.permission.MEDIA_LOCATION');
-        Logger.Info(TAG, `Request permission result: ${result2}`);
-
-        this.initializeCategoriesAndAssets(context);
-    }
+    @State private categories: Category[] = UploadScheduler.categories;
 
     build() {
         Tabs() {
@@ -141,7 +120,7 @@ export struct UploadPage {
 
                             Text(category.location)
                         }
-                        .height('32')
+                        .height(32)
 
                         ForEach(category.patterns, (pattern: string) => {
                             Text(pattern)
@@ -159,26 +138,5 @@ export struct UploadPage {
                 .tabBar(category.name)
             })
         }
-    }
-
-    private async initializeCategoriesAndAssets(context: Context) {
-        while (this.categories.length > 0) {
-            this.categories.pop();
-        }
-        for (let c of NCommon.Preference.categories) {
-            this.categories.push(new Category(c));
-        }
-
-        let helper = PHelper.getPhotoAccessHelper(context);
-        let result = await helper.getAssets(FETCH_OPTIONS);
-        for (let asset of await result.getAllObjects()) {
-            let photoItem = new PhotoItem(asset);
-            for (let category of this.categories) {
-                if (category.tryAddAsset(photoItem) != AddAssetResult.Unmatched) {
-                    break;
-                }
-            }
-        }
-        result.close();
     }
 }
