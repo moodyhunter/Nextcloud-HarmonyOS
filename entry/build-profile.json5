@@ -1,6 +1,16 @@
 {
   "apiType": "stageMode",
   "buildOption": {
+    "resOptions": {
+      "copyCodeResource": {
+        "enable": false
+      }
+    },
+    "externalNativeOptions": {
+      "path": "src/main/cpp/CMakeLists.txt",
+      "arguments": "",
+      "cppFlags": ""
+    }
   },
   "buildOptionSet": [
     {
@@ -13,6 +23,12 @@
               "./obfuscation-rules.txt"
             ]
           }
+        }
+      },
+      "nativeLib": {
+        "debugSymbol": {
+          "strip": true,
+          "exclude": []
         }
       }
     },

@@ -6,4 +6,6 @@ export enum FolderViewMode {
 
 export namespace Constants {
     export const VIEW_MODE_KEY = 'FolderList.FolderViewMode';
+
+    export const PC_CLOUD_DISK_PATH = 'PC.CloudDisk.Path';
 }

@@ -7,5 +7,6 @@
   "license": "",
   "dependencies": {
     "nextcloud": "file:../nextcloud",
+    "libcloudsync.so": "file:./src/main/cpp/types/libcloudsync"
   },
 }
