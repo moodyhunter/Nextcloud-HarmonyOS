@@ -43,6 +43,7 @@ export default class EntryAbility extends UIAbility {
             await windowStage.loadContent(page);
             if (isPc) {
                 PersistentStorage.persistProp(Constants.PC_CLOUD_DISK_PATH, '');
+                PersistentStorage.persistProp(Constants.PC_CLOUD_DISK_ALIAS, '');
             } else {
                 PersistentStorage.persistProp(Constants.VIEW_MODE_KEY, FolderViewMode.TwoColumns);
             }
@@ -69,7 +70,7 @@ export default class EntryAbility extends UIAbility {
         Logger.Info(TAG, 'Ability has back to background');
     }
 
-    onMemoryLevel(level: AbilityConstant.MemoryLevel): void {
+    async onMemoryLevel(level: AbilityConstant.MemoryLevel) {
         Logger.Info(TAG, `onMemoryLevel: level = ${AbilityConstant.MemoryLevel[level]}`);
     }
 };

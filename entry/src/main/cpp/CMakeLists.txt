@@ -13,7 +13,10 @@ endif()
 include_directories(${NATIVERENDER_ROOT_PATH}
                     ${NATIVERENDER_ROOT_PATH}/include)
 
-add_library(cloudsync SHARED napi_init.cpp)
+add_library(cloudsync 
+    SHARED 
+        src/napi_init.cpp
+)
 target_link_libraries(
     cloudsync
     PUBLIC

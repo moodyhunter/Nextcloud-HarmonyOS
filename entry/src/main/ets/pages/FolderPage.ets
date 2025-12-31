@@ -29,10 +29,14 @@ export struct FolderPage {
             let props: PreviewPageProps = { entry: entry, fullPath: this.currentPath.getChild(entry.name) };
             pathInfo = new NavPathInfo(PREVIEW_PAGE_NAME, props);
         } else {
-            promptAction.showToast({
-                message: `No preview available for ${entry.name}`,
-                duration: 2000,
-            });
+            try {
+                this.getUIContext().getPromptAction().showToast({
+                    message: `No preview available for ${entry.name}`,
+                    duration: 2000,
+                });
+            } catch (error) {
+                Logger.Error(TAG, `Failed to show toast: ${JSON.stringify(error)}`);
+            }
 
             return;
         }
