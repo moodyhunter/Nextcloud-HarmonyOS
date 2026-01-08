@@ -23,4 +23,5 @@ target_link_libraries(
         libace_napi.z.so
         libohclouddiskmanager.so
         libhilog_ndk.z.so
+        libdeviceinfo_ndk.z.so
 )

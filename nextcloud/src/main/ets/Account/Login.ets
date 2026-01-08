@@ -1,6 +1,6 @@
-import { Logger } from './Logger';
-import { Configuration, CoreClientFlowLoginV2Api, CoreLoginFlowV2Credentials } from './nextcloud-api-sdk';
-import { NCommon } from './Common';
+import { Logger } from '../Utils/Logger';
+import { Configuration, CoreClientFlowLoginV2Api, CoreLoginFlowV2Credentials } from '../nextcloud-api-sdk';
+import { NCommon } from '../Common';
 import { AxiosError } from '@ohos/axios';
 
 const TAG = "Nextcloud-Login";

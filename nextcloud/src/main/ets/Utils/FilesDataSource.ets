@@ -1,6 +1,6 @@
 import { BasicDataSource } from './BasicDatasource';
-import { DirectoryEntry } from './webdav/DirEntryParserStateMachine';
-import { ListFiles } from './webdav/Files';
+import { DirectoryEntry } from '../webdav/DirEntryParserStateMachine';
+import { ListFiles } from '../webdav/Files';
 
 export class FilesDataSource extends BasicDataSource<DirectoryEntry> {
     constructor(path: string) {

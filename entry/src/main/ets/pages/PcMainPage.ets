@@ -1,10 +1,38 @@
-import { DirectoryEntry, ListFiles, Logger } from 'nextcloud';
+import { DirectoryEntry, ListFiles, Logger, DownloadFile } from 'nextcloud';
 import { common } from '@kit.AbilityKit';
-import { fileUri, picker } from '@kit.CoreFileKit';
+import { fileIo, fileShare, fileUri, picker } from '@kit.CoreFileKit';
 import { Constants } from '../utils/Common';
 import * as CloudSyncApi from '../utils/CloudSyncApi';
+import { PermissionManager } from '../utils/PermissionManager';
+import { TransferManager, TransferManagerImpl, TransferTask } from 'nextcloud';
+import { LengthMetrics } from '@kit.ArkUI';
+import { DownloadQueue } from '../utils/DownloadQueue';
 
 const TAG = 'PcAbility'
+const OPERATION_MODES = fileShare.OperationMode.READ_MODE | fileShare.OperationMode.WRITE_MODE;
+
+@Component
+struct TransferProgressItem {
+    @ObjectLink transferTask: TransferTask;
+
+    build() {
+        Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, space: { main: LengthMetrics.vp(8) } }) {
+            Text(this.transferTask.filename)
+                .width(180)
+                .textOverflow({ overflow: TextOverflow.MARQUEE })
+                .textAlign(TextAlign.End)
+
+            Progress({
+                value: this.transferTask.transferedSize,
+                total: this.transferTask.totalSize,
+            })
+
+            Text(this.transferTask.progressPercentText)
+                .width(100)
+        }
+    }
+}
+
 
 @Entry
 @Component
@@ -13,6 +41,9 @@ struct PCAbility {
     @StorageLink(Constants.PC_CLOUD_DISK_ALIAS) @Watch('onAliasChanged') private alias: string = 'Moody 的 Nextcloud';
     @State private opHistory: CloudSyncApi.FileChangeInfo[] = [];
     @State private files: DirectoryEntry[] = [];
+    @State private transferManager: TransferManagerImpl = TransferManager;
+    private downloadQueue: DownloadQueue = new DownloadQueue();
+    private pendingMoveTo: Map<string, string> = new Map();
 
     onAliasChanged(): void {
         CloudSyncApi.updateCustomAlias(this.path, this.alias);
@@ -20,18 +51,40 @@ struct PCAbility {
 
     async aboutToAppear(): Promise<void> {
         Logger.Info(TAG, `pcAbility aboutToAppear`);
+        await PermissionManager.RequestPermission(
+            this.getUIContext()!
+                .getHostContext()!,
+            "ohos.permission.FILE_ACCESS_PERSIST"
+        )
         if (this.path) {
             CloudSyncApi.connect(this.path);
         }
         CloudSyncApi.registerFileChangeMonitor((info: CloudSyncApi.FileChangeInfo) => {
+            if (info.operationType === CloudSyncApi.FileChangeOperationType.MOVE_FROM) {
+                this.pendingMoveTo.set(info.fileId, info.relativePath);
+            } else if (info.operationType === CloudSyncApi.FileChangeOperationType.MOVE_TO) {
+                let moveFrom = this.pendingMoveTo.get(info.fileId);
+                if (moveFrom === undefined) {
+                    Logger.Error(TAG, `got a MoveTo without a MoveFrom`);
+                } else {
+                    Logger.Info(TAG, `move: ${moveFrom} -> ${info.relativePath}`);
+                    this.pendingMoveTo.delete(info.fileId);
+                }
+            }
             Logger.Info(TAG, `${CloudSyncApi.FileChangeOperationType[info.operationType]} ::: '${info.relativePath}'`);
             this.opHistory = [info, ...this.opHistory];
         });
 
-        this.files = await ListFiles('/');
-        for (let f of this.files) {
-            Logger.Info(TAG, `${JSON.stringify(f)}`);
+        try {
+            await fileShare.activatePermission([{
+                uri: fileUri.getUriFromPath(this.path),
+                operationMode: OPERATION_MODES
+            }]);
+            Logger.Info(TAG, `activate permission done`);
+        } catch (e) {
+            Logger.Error(TAG, `failed to activate: ${JSON.stringify(e)}`);
         }
+        this.files = await ListFiles('/');
     }
 
     aboutToDisappear(): void {
@@ -50,9 +103,9 @@ struct PCAbility {
                         let context = this.getUIContext().getHostContext() as common.UIAbilityContext;
                         let documentPicker = new picker.DocumentViewPicker(context);
                         let items = await documentPicker.select({
-                            defaultFilePathUri: 'file://docs/storage/Users/currentUser/',
+                            defaultFilePathUri: 'file://docs/storage/Users/currentUser/CloudSyncFolder',
                             maxSelectNumber: 1,
-                            selectMode: picker.DocumentSelectMode.FOLDER
+                            selectMode: picker.DocumentSelectMode.FOLDER,
                         });
                         if (items.length !== 1) {
                             Logger.Error(TAG, `???`);
@@ -61,6 +114,16 @@ struct PCAbility {
                         let path = new fileUri.FileUri(items[0]).path;
                         this.path = path;
 
+                        try {
+                            Logger.Info(TAG, items[0]);
+                            await fileShare.persistPermission([{
+                                uri: items[0],
+                                operationMode: OPERATION_MODES
+                            }]);
+                            Logger.Info(TAG, `persist done`);
+                        } catch (e) {
+                            Logger.Error(TAG, `failed to persist permission: ${JSON.stringify(e)}`);
+                        }
                     })
 
                 Button('create root dir')
@@ -101,19 +164,53 @@ struct PCAbility {
                     .width('100%')
                     .height(150)
 
-                    Button('apply')
+                    Button('reload')
                         .onClick(async () => {
-                            let state: CloudSyncApi.SyncFileState = {
-                                name: 'testfile',
-                                size: 12345,
-                                syncState: CloudSyncApi.SyncState.SYNCING,
-                            };
-                            CloudSyncApi.setLocalFileState(this.path, [state]);
+                            this.files = await ListFiles('/');
+                        })
+
+                    Button('sync all')
+                        .onClick(async () => {
+                            Logger.Info(TAG, `sync all`);
+                            this.downloadQueue.addRootDir();
+                            while (this.downloadQueue.hasPendingItem()) {
+                                let next = await this.downloadQueue.getNextDownloadFile();
+                                if (next === undefined) {
+                                    break;
+                                }
+                                Logger.Info(TAG, next.relativePath);
+                                if (next.isDirectory) {
+                                    try {
+                                        fileIo.mkdirSync(this.path + '/' + next.relativePath);
+                                    } catch (e) {
+                                    }
+                                } else {
+                                    await DownloadFile(next.relativePath, this.path + '/' + next.relativePath);
+                                }
+                                Logger.Info(TAG, next.relativePath);
+                            }
+                            Logger.Info(TAG, `download completed`);
                         })
                 }
                 .padding(8)
                 .width('100%')
                 .backgroundColor($r('sys.color.glass_material_outline_secondary'))
+
+                Column({ space: 8 }) {
+                    Text('download progress')
+
+                    List() {
+                        LazyForEach(this.transferManager.tasks, (item: TransferTask) => {
+                            ListItem() {
+                                TransferProgressItem({
+                                    transferTask: item
+                                })
+                            }
+                        })
+                    }
+                    .width('100%')
+                    .height(250)
+                }
 
                 Column({ space: 8 }) {
                     Text('Operation History:')
@@ -122,13 +219,15 @@ struct PCAbility {
                             ListItem() {
                                 Row() {
                                     Text(`${index + 1}. `)
-                                    Text(`FileId: ${item.relativePath}, Op: ${CloudSyncApi.FileChangeOperationType[item.operationType]}`)
+                                    Text(
+                                        `: ${item.relativePath}, Op: ${CloudSyncApi.FileChangeOperationType[item.operationType]}`
+                                    )
                                 }
                             }
                         })
                     }
                     .width('100%')
-                    .height(350)
+                    .height(250)
                 }
                 .padding(8)
                 .backgroundColor($r('sys.color.glass_material_outline_secondary'))

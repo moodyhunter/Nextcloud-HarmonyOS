@@ -15,6 +15,17 @@ export class BasicDataSource<T> implements IDataSource {
         return this.entries.slice(start, start + count);
     }
 
+    public prependItem(item: T): T {
+        this.entries.unshift(item);
+        this.notifyDataAdd(0);
+        return this.entries[0];
+    }
+
+    public appendItem(item: T) {
+        this.entries.push(item);
+        this.notifyDataAdd(this.entries.length - 1);
+    }
+
     registerDataChangeListener(listener: DataChangeListener): void {
         if (this.listeners.indexOf(listener) < 0) {
             this.listeners.push(listener);

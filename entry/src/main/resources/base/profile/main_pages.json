@@ -1,6 +1,7 @@
 {
   "src": [
     "pages/Index",
-    "pages/PcMainPage"
+    "pages/PcMainPage",
+    "statusbar/StatusBarPage"
   ]
 }

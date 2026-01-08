@@ -1,7 +1,7 @@
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
-import { Logger } from './Logger';
+import { Logger } from './Utils/Logger';
 import util from '@ohos.util';
 
 

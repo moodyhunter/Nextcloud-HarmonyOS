@@ -31,6 +31,5 @@ export enum SyncState {
 
 export interface SyncFileState {
     name: string;
-    size: number;
     syncState: SyncState;
 }

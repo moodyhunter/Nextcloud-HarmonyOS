@@ -1,7 +1,7 @@
 {
   "app": {
     "bundleName": "me.moody.nextcloud",
-    "patchVersionCode": 2000865,
+    "patchVersionCode": 2000866,
     "versionCode": 1000000
   },
   "module": {

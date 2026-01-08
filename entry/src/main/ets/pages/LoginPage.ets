@@ -1,6 +1,5 @@
-import { LoginProcess, NCommon } from 'nextcloud';
+import { LoginProcess, NCommon, Logger } from 'nextcloud';
 import { LengthMetrics } from '@kit.ArkUI';
-import { Logger } from 'nextcloud/src/main/ets/Logger';
 import { webview } from '@kit.ArkWeb';
 
 const TAG = 'pages/LoginPage'
@@ -125,7 +124,13 @@ export struct LoginPage {
             if (!this.loginStarted) {
                 Text('Type the URL of your Nextcloud instance:')
                     .margin({ left: 24, right: 24, bottom: 8 })
-                Flex({ alignItems: ItemAlign.Center, direction: FlexDirection.Row, space: { main: LengthMetrics.vp(8) } }) {
+                Flex({
+                    alignItems: ItemAlign.Center,
+                    direction: FlexDirection.Row,
+                    space: {
+                        main: LengthMetrics.vp(8)
+                    }
+                }) {
                     TextInput({ placeholder: 'https://nextcloud.com', text: NCommon.Preference.hostname })
                         .onChange((value: string) => {
                             NCommon.Preference.hostname = value;

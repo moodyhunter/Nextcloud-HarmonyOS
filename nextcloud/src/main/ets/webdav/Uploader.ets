@@ -1,13 +1,14 @@
 import { rcp } from '@kit.RemoteCommunicationKit';
 import { NCommon } from '../Common';
 import fs from '@ohos.file.fs';
-import { Logger } from '../Logger';
+import { Logger } from '../Utils/Logger';
+import { TransferManager, TransferTask, TransferType } from '../TransferManager';
 
 
 const TAG = "Nextcloud-Upload";
 
 
-function CreateSession(extraHeaders?: Map<string, string>): rcp.Session {
+function CreateSession(extraHeaders?: Map<string, string>, eventsHandler?: rcp.HttpEventsHandler): rcp.Session {
     let headers: rcp.RequestHeaders = {};
 
     if (extraHeaders !== undefined) {
@@ -24,11 +25,7 @@ function CreateSession(extraHeaders?: Map<string, string>): rcp.Session {
         headers: headers,
         requestConfiguration: {
             tracing: {
-                httpEventsHandler: {
-                    onUploadProgress: (progress: number) => {
-                        Logger.Info(TAG, "Upload progress: " + progress);
-                    },
-                }
+                httpEventsHandler: eventsHandler,
             }
         }
     }
@@ -96,6 +93,33 @@ export async function CreatePath(path: string): Promise<number> {
     }
     session.close();
     return respCode;
+}
+
+export async function DownloadFile(relativePath: string, localPath: string): Promise<void> {
+    let task = TransferManager.addTransferTask(TransferType.DOWNLOAD, relativePath);
+
+    let eventsHandler: rcp.HttpEventsHandler = {
+        onDownloadProgress: (transferredBytes: number, totalBytes: number) => {
+            task.updateProgress(transferredBytes, totalBytes);
+        }
+    };
+
+    let session = CreateSession(undefined, eventsHandler);
+    let downloadToFileOptions: rcp.DownloadToFile = {
+        kind: "file",
+        file: localPath,
+    };
+
+    session.downloadToFile(
+        "https://" + NCommon.Preference.hostname + "/remote.php/dav/files/" + NCommon.Preference.username + "/" + relativePath,
+        downloadToFileOptions
+    ).then(() => {
+        task.updateProgress(task.totalSize, task.totalSize);
+    }).catch((error: BusinessError) => {
+        Logger.Error(TAG, `Download failed: ${relativePath}, error: ${JSON.stringify(error)}`);
+    });
+
+    session.close();
 }
 
 export async function UploadFile(filename: string, mTime: number, path: string, uri: string): Promise<number> {

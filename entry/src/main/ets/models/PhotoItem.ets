@@ -5,7 +5,7 @@ import { FormatTime } from '../utils/Utils';
 import { image } from '@kit.ImageKit';
 
 const TAG = 'PhotoItem';
-const DEFAULT_FORMAT = 'yyyy/MM/'
+const DEFAULT_FORMAT = 'yyyy/MM/';  
 
 export enum UploadStatus {
     None,

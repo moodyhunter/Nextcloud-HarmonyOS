@@ -28,6 +28,12 @@
       },
       {
         "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
+      },
+      {
+        "name": "ohos.permission.FILE_ACCESS_PERSIST"
+      },
+      {
+        "name": "ohos.permission.PREPARE_APP_TERMINATE"
       }
     ],
     "deviceTypes": [
@@ -75,7 +81,14 @@
             "name": "ohos.extension.backup",
             "resource": "$profile:backup_config"
           }
-        ],
+        ]
+      },
+      {
+        "name": "StatusBarAbility",
+        "srcEntry": "./ets/statusbar/StatusBarAbility.ets",
+        "icon": "$media:layered_image",
+        "type": "statusBarView",
+        "exported": true
       }
     ]
   }
