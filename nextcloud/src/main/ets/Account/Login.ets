@@ -2,8 +2,9 @@ import { Logger } from '../Utils/Logger';
 import { Configuration, CoreClientFlowLoginV2Api, CoreLoginFlowV2Credentials } from '../nextcloud-api-sdk';
 import { NCommon } from '../Common';
 import { AxiosError } from '@ohos/axios';
+import { AsyncSleep } from '../Utils/CommonUtils';
 
-const TAG = "Nextcloud-Login";
+const TAG = 'Account/Login';
 
 interface InitLoginResult {
     success: boolean;
@@ -40,7 +41,7 @@ class LoginProcess {
             return { success: true, loginUrl: flow.login };
         } catch (e) {
             let axiosError: AxiosError = e as AxiosError;
-            Logger.Error(TAG, "LoginV2Init failed: " + e);
+            Logger.Error(TAG, "LoginV2Init failed: " + JSON.stringify(e));
             if (Number(axiosError.code) === 2300006) {
                 return { success: false, errorMsg: (JSON.parse(axiosError.message) as Error).message };
             } else {
@@ -64,7 +65,7 @@ class LoginProcess {
                     cancelled: true
                 };
             }
-            await new Promise<never>(resolve => setTimeout(resolve, 1500));
+            await AsyncSleep(1500);
             result = await this.loginPollOnce();
         }
 

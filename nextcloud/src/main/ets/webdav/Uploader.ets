@@ -99,7 +99,7 @@ export async function DownloadFile(relativePath: string, localPath: string): Pro
     let task = TransferManager.addTransferTask(TransferType.DOWNLOAD, relativePath);
 
     let eventsHandler: rcp.HttpEventsHandler = {
-        onDownloadProgress: (transferredBytes: number, totalBytes: number) => {
+        onDownloadProgress: (totalBytes: number, transferredBytes: number) => {
             task.updateProgress(transferredBytes, totalBytes);
         }
     };
@@ -110,7 +110,7 @@ export async function DownloadFile(relativePath: string, localPath: string): Pro
         file: localPath,
     };
 
-    session.downloadToFile(
+    await session.downloadToFile(
         "https://" + NCommon.Preference.hostname + "/remote.php/dav/files/" + NCommon.Preference.username + "/" + relativePath,
         downloadToFileOptions
     ).then(() => {

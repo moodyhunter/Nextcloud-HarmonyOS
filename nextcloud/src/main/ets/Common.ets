@@ -62,7 +62,7 @@ class NPreference {
     ];
     private pref: preferences.Preferences;
 
-    constructor(context: common.UIAbilityContext) {
+    constructor(context: Context) {
         this.pref = preferences.getPreferencesSync(context, { name: "nextcloud" });
     }
 
@@ -185,7 +185,7 @@ export namespace NCommon {
      * Initialise the common module
      * @param context The context to use for preferences
      */
-    export function Initialise(context: common.UIAbilityContext) {
+    export function Initialise(context: Context) {
         Logger.Info(TAG, "Common initialised with User-Agent: " + UserAgent());
         Preference = new NPreference(context);
     }

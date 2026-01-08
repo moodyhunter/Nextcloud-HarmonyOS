@@ -20,7 +20,6 @@ export default class EntryAbility extends UIAbility {
         } catch (error) {
             Logger.Error(TAG, `failed to set color mode!`);
         }
-        NCommon.Initialise(this.context);
         await InitialiseNextcloud(this.context);
     }
 

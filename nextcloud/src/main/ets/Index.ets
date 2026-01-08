@@ -20,4 +20,4 @@ export { CreatePath, UploadFile, DownloadFile } from './webdav/Uploader';
 
 export { Logger } from './Utils/Logger';
 
-export { InitialiseNextcloud } from './Init';
+export { InitialiseNextcloud } from './Main';

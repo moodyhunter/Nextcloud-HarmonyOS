@@ -1,21 +1,13 @@
-// Describes a logged in user
+import { DBAccount } from '../Database/Types/DBAccount';
+import { Logger } from '../Utils/Logger';
 
 const TAG = 'SyncEngine/Account';
 
 export class Account {
-    id: string;
-    username: string;
-    password: string;
-    hostname: string;
+    dbAccount: DBAccount;
 
-    constructor(id: string, username: string, password: string, hostname: string) {
-        this.id = id;
-        this.username = username;
-        this.password = password;
-        this.hostname = hostname;
-    }
-
-    static ReadFromRecord(): Account {
-        return new Account('', '', '', '');
+    constructor(dbAccount: DBAccount) {
+        Logger.Info(TAG, `constructor: enter`);
+        this.dbAccount = dbAccount;
     }
 }
