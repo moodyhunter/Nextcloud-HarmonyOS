@@ -8,7 +8,9 @@ export { ListFiles } from './webdav/Files';
 
 export { DirectoryEntry } from './webdav/DirEntryParserStateMachine';
 
-export { LoginProcess } from './Account/Login';
+export { LoginFlow } from './Account/LoginFlow';
+
+export { Account } from './Account/Account';
 
 export { BasicDataSource } from './Utils/BasicDatasource';
 
@@ -20,4 +22,6 @@ export { CreatePath, UploadFile, DownloadFile } from './webdav/Uploader';
 
 export { Logger } from './Utils/Logger';
 
-export { InitialiseNextcloud } from './Main';
+export { AsyncSleep } from './Utils/CommonUtils';
+
+export { Nextcloud, InitialiseNextcloud } from './Main';

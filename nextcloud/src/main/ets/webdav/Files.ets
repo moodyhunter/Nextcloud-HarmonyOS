@@ -3,18 +3,19 @@ import { Logger } from '../Utils/Logger';
 import { NCommon } from '../Common';
 import { xml } from '@kit.ArkTS';
 import { DirectoryEntry, DirEntryParserStateMachine } from './DirEntryParserStateMachine';
+import { Account } from '../Account/Account';
 
 const TAG = "Nextcloud-Files";
 
 let session: rcp.Session | null = null;
 
-export async function ListFiles(path: string): Promise<DirectoryEntry[]> {
-    path = "/remote.php/dav/files/" + NCommon.Preference.username + path;
+export async function ListFiles(account: Account, path: string): Promise<DirectoryEntry[]> {
+    let url = account.remoteBaseDirUrl() + path;
     Logger.Info(TAG, "Listing files at " + path);
 
     let sessionConfiguration: rcp.SessionConfiguration = {
         headers: {
-            'authorization': NCommon.MakeAuthorization(),
+            'authorization': account.makeAuthorizationHeader(),
             'user-agent': NCommon.UserAgent(),
             'accept': 'text/plains'
         }
@@ -25,7 +26,7 @@ export async function ListFiles(path: string): Promise<DirectoryEntry[]> {
     }
 
     let req =
-        new rcp.Request("https://" + NCommon.Preference.hostname + path, "PROPFIND", {},
+        new rcp.Request(url, "PROPFIND", {},
             '<?xml version="1.0" encoding="UTF-8"?>\n' +
                 '        <d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">\n' +
                 '            <d:prop>\n' +
@@ -71,5 +72,6 @@ export async function ListFiles(path: string): Promise<DirectoryEntry[]> {
 
     parser.parseXml(options)
 
-    return machine.getDirEntryList(path);
+    const prefix = '/remote.php/dav/files/' + account.username + path;
+    return machine.getDirEntryList(prefix);
 }

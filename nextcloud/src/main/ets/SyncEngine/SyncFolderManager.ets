@@ -4,7 +4,7 @@ import { DBManager } from '../Database/DBManager';
 import { Account } from '../Account/Account';
 import { DBAccount, DBAccountFactory } from '../Database/Types/DBAccount';
 import { NCommon } from '../Common';
-import { DBSyncFolder, DBSyncFolderFactory } from '../Database/Types/DBSyncFolder';
+import { DBSyncFolderFactory } from '../Database/Types/DBSyncFolder';
 import { SyncFolder } from './SyncFolder';
 
 const TAG = 'SyncEngine/SyncFolderManager';
@@ -24,8 +24,20 @@ export class SyncFolderManager {
         await this.loadSyncFolders();
     }
 
+    public hasAccounts(): boolean {
+        return this.accounts.size > 0;
+    }
+
+    public getAccountById(accountId: number): Account {
+        let account = this.accounts.get(accountId);
+        if (!account) {
+            throw new Error(`getAccountById: account id ${accountId} not found`);
+        }
+        return account;
+    }
+
     private async loadSyncFolders() {
-        let dbFolders = await this.dbManager.getObjects(DBSyncFolderFactory);
+        let dbFolders = await this.dbManager.getItems(DBSyncFolderFactory);
         for (let dbFolder of dbFolders) {
             let ownerAccount = this.accounts.get(dbFolder.accountId);
             if (!ownerAccount) {
@@ -38,17 +50,27 @@ export class SyncFolderManager {
     }
 
     private async loadAccounts(): Promise<void> {
-        let dbAccounts = await this.dbManager.getObjects(DBAccountFactory);
+        let dbAccounts = await this.dbManager.getItems(DBAccountFactory);
         for (let dbAccount of dbAccounts) {
             let account = new Account(dbAccount);
             this.accounts.set(dbAccount.id, account);
         }
 
-        if (NCommon.Preference.username.length > 0 && dbAccounts.length === 0) {
-            Logger.Info(TAG, `loadAccounts: no accounts found, migrate default account`);
-            let dbAccount = new DBAccount(0, NCommon.Preference.username, NCommon.Preference.password, NCommon.Preference.hostname);
-            this.accounts.set(dbAccount.id, new Account(dbAccount));
-            await this.dbManager.storeObject(dbAccount);
+        if (dbAccounts.length === 0) {
+            // No accounts found in database, migrate from preferences if possible
+            let prefServer = NCommon.Preference.getPref('login.server', '');
+            let prefUsername = NCommon.Preference.getPref('login.username', '');
+            let prefPassword = NCommon.Preference.getPref('login.appPassword', '');
+            if (prefPassword.length > 0) {
+                Logger.Info(TAG, `loadAccounts: no accounts found, migrate default account '${prefUsername}@${prefServer}' from preferences`);
+                let dbAccount = new DBAccount(0, prefServer, prefUsername, prefPassword);
+                this.accounts.set(dbAccount.id, new Account(dbAccount));
+                await this.dbManager.storeItem(dbAccount);
+            } else {
+                Logger.Info(TAG, `loadAccounts: no accounts found, possibly first run`);
+            }
+        } else {
+            Logger.Info(TAG, `loadAccounts: ${dbAccounts.length} accounts loaded`);
         }
     }
 }

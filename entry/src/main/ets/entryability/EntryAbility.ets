@@ -1,6 +1,6 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { InitialiseNextcloud, Logger, NCommon } from 'nextcloud';
+import { AsyncSleep, InitialiseNextcloud, Logger, NCommon } from 'nextcloud';
 import { Constants, FolderViewMode } from '../utils/Common';
 import { GlobalStorage } from '../utils/GlobalStorage';
 import { Notification } from '../utils/NotificationManager';
@@ -11,7 +11,7 @@ import { statusBarManager } from '@kit.DeskTopExtensionKit';
 const TAG = 'EntryAbility';
 
 export default class EntryAbility extends UIAbility {
-    id: number = 0;
+    private initCompleted: boolean = false;
 
     async onCreate(_want: Want, _launchParam: AbilityConstant.LaunchParam) {
         Logger.Info(TAG, 'Ability onCreate');
@@ -21,6 +21,7 @@ export default class EntryAbility extends UIAbility {
             Logger.Error(TAG, `failed to set color mode!`);
         }
         await InitialiseNextcloud(this.context);
+        this.initCompleted = true;
     }
 
     onDestroy() {
@@ -28,15 +29,16 @@ export default class EntryAbility extends UIAbility {
     }
 
     convertToPixelMap(res: Resource) {
-        // 获取 resourceManager
         const resManager = this.context.resourceManager;
-
-        // 获取 DrawableDescriptor 并转换为 PixelMap
-        const drawableDesc = resManager?.getDrawableDescriptor(res.id) as DrawableDescriptor;
-        return drawableDesc?.getPixelMap(); // 直接获取 PixelMap
+        const drawableDesc = resManager?.getDrawableDescriptor(res.id);
+        return drawableDesc?.getPixelMap();
     }
 
     async onWindowStageCreate(windowStage: window.WindowStage) {
+        while (!this.initCompleted) {
+            Logger.Info(TAG, 'Waiting for initialization to complete...');
+            await AsyncSleep(100);
+        }
         Logger.Info(TAG, 'Main window is created, set main page for this ability');
 
         let context = this.context;
@@ -97,6 +99,7 @@ export default class EntryAbility extends UIAbility {
 
             } else {
                 PersistentStorage.persistProp(Constants.VIEW_MODE_KEY, FolderViewMode.TwoColumns);
+                PersistentStorage.persistProp(Constants.PHONE_ACTIVE_ACCOUNT_ID, 0);
             }
             Logger.Info(TAG, 'Succeeded in loading the content.');
         } catch (e) {

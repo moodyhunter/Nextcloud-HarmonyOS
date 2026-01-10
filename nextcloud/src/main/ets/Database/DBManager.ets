@@ -1,34 +1,39 @@
 import { relationalStore } from '@kit.ArkData';
 import { Logger } from '../Utils/Logger';
-import { DBAccount, DBAccountFactory } from './Types/DBAccount';
+import { DBAccountFactory } from './Types/DBAccount';
 import { DBSyncFolderFactory } from './Types/DBSyncFolder';
 
-const TAG = 'Utils/StorageAdapter';
+const TAG = 'Database/DBManager';
 
 export interface ColumnDescriptor {
-    column: string;
-    type: string;
-    attrs?: string;
+    column: string; ///< Column name
+    type: string; ///< Data type (e.g., INTEGER, TEXT)
+    attrs?: string; ///< Additional attributes (e.g., PRIMARY KEY, NOT NULL)
 }
 
 export type ColumnDescriptors = ColumnDescriptor[];
 
-export interface DBObject {
+interface DBGetTableName {
     getTableName(): string;
-
-    toBucket(): relationalStore.ValuesBucket;
 }
 
-interface DBTableDescriptor {
-    getTableName(): string;
-
+interface DBTableDescriptor extends DBGetTableName {
     getColumnDesc(): ColumnDescriptors;
 }
 
-export interface DBObjectCreator<T extends DBObject> extends DBTableDescriptor {
-    createFromBucket(bucket: relationalStore.ValuesBucket): T;
+/**
+ * Interface for database items that can be converted to a ValuesBucket.
+ */
+export interface DBItem extends DBGetTableName {
+    toBucket(): relationalStore.ValuesBucket;
 }
 
+/**
+ * Interface for creating database objects from a ValuesBucket.
+ */
+export interface DBObjectCreator<T extends DBItem> extends DBTableDescriptor {
+    createFromBucket(bucket: relationalStore.ValuesBucket): T;
+}
 
 export class DBManager {
     store: relationalStore.RdbStore | undefined = undefined;
@@ -143,7 +148,7 @@ export class DBManager {
         Logger.Debug(TAG, 'doTransaction: completed');
     }
 
-    async getObjects<T extends DBObject>(factory: DBObjectCreator<T>): Promise<T[]> {
+    async getItems<T extends DBItem>(factory: DBObjectCreator<T>): Promise<T[]> {
         Logger.Info(TAG, 'getObjects: enter');
         if (!this.store) {
             Logger.Error(TAG, `getObjects: store is undefined`);
@@ -165,7 +170,7 @@ export class DBManager {
         return result;
     }
 
-    async storeObject(object: DBObject): Promise<void> {
+    async storeItem(object: DBItem): Promise<void> {
         Logger.Info(TAG, 'storeObject: enter');
         if (!this.store) {
             Logger.Error(TAG, `storeObject: store is undefined`);

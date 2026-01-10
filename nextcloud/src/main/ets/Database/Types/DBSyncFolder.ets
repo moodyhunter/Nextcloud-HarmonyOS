@@ -1,10 +1,10 @@
 import { relationalStore } from '@kit.ArkData';
 import { Logger } from '../../Utils/Logger';
-import { ColumnDescriptors, DBObject, DBObjectCreator } from '../DBManager';
+import { ColumnDescriptors, DBItem, DBObjectCreator } from '../DBManager';
 
 const TAG = 'Database/DBSyncFolder';
 
-export class DBSyncFolder implements DBObject {
+export class DBSyncFolder implements DBItem {
     static readonly DB_TABLE_NAME: string = 'Folders';
     id: number;
     systemPath: string;

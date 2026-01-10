@@ -1,4 +1,4 @@
-import { Logger, NCommon } from 'nextcloud';
+import { AsyncSleep, Logger, NCommon } from 'nextcloud';
 import { AddAssetResult, AddPosition, Category } from '../models/Category';
 import { PhotoItem } from '../models/PhotoItem';
 import { GlobalStorage } from './GlobalStorage';
@@ -6,12 +6,10 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { dataSharePredicates } from '@kit.ArkData';
 import { Notification } from './NotificationManager';
 
-const TAG = 'Utils-UploadScheduler';
+const TAG = 'Utils/PhotoAssetsManager';
 
-export namespace UploadScheduler {
-    export let categories: Category[] = [];
-
-    const FETCH_COLUMNS = [
+class PhotoAssetsManagerImpl {
+    private static readonly FETCH_COLUMNS = [
         photoAccessHelper.PhotoKeys.URI,
         photoAccessHelper.PhotoKeys.PHOTO_TYPE,
         photoAccessHelper.PhotoKeys.PHOTO_SUBTYPE,
@@ -27,35 +25,23 @@ export namespace UploadScheduler {
         photoAccessHelper.PhotoKeys.DETAIL_TIME,
         photoAccessHelper.PhotoKeys.DATE_TAKEN_MS,
     ];
+    public categories: Category[] = [];
 
-
-    function doAddPhotoItem(photoItem: PhotoItem, addPosition: AddPosition) {
-        for (let category of categories) {
-            if (category.tryAddAsset(photoItem, addPosition) != AddAssetResult.Unmatched) {
-                break;
-            }
-        }
-    }
-
-
-    export async function initialize() {
-        while (categories.length > 0) {
-            categories.pop();
-        }
-
-        for (let c of NCommon.Preference.categories) {
-            categories.push(new Category(c));
+    public async initialize(categories: NCommon.CategoryConfig[]) {
+        this.categories = [];
+        for (let c of categories) {
+            this.categories.push(new Category(c));
         }
 
         const FETCH_OPTIONS: photoAccessHelper.FetchOptions = {
-            fetchColumns: FETCH_COLUMNS,
+            fetchColumns: PhotoAssetsManagerImpl.FETCH_COLUMNS,
             predicates: new dataSharePredicates.DataSharePredicates().orderByDesc(photoAccessHelper.PhotoKeys.DATE_TAKEN),
         };
 
         try {
             let result = await GlobalStorage.pHelper.getAssets(FETCH_OPTIONS);
             for (let asset of await result.getAllObjects()) {
-                doAddPhotoItem(new PhotoItem(asset), AddPosition.Append);
+                this.doAddPhotoItem(new PhotoItem(asset), AddPosition.Append);
             }
             result.close();
         } catch (error) {
@@ -63,11 +49,10 @@ export namespace UploadScheduler {
         }
     }
 
-
-    export async function prependNewAsset(assetUri: string) {
-        Logger.Info(TAG, `addNewAsset enter, uri: ${assetUri}`);
+    public async prependNewAsset(assetUri: string) {
+        Logger.Info(TAG, `prependNewAsset enter, uri: ${assetUri}`);
         const FETCH_OPTIONS: photoAccessHelper.FetchOptions = {
-            fetchColumns: FETCH_COLUMNS,
+            fetchColumns: PhotoAssetsManagerImpl.FETCH_COLUMNS,
             predicates: new dataSharePredicates.DataSharePredicates().equalTo(photoAccessHelper.PhotoKeys.URI, assetUri),
         };
 
@@ -79,21 +64,31 @@ export namespace UploadScheduler {
             }
             let photoItem = new PhotoItem(await assetResult.getFirstObject());
             Logger.Info(TAG, `prepending new asset: ${photoItem.displayName}, uri: ${photoItem.uri}`);
-            doAddPhotoItem(photoItem, AddPosition.Prepend);
+            this.doAddPhotoItem(photoItem, AddPosition.Prepend);
             assetResult.close();
         } catch (error) {
             Logger.Error(TAG, `failed to add new asset: ${error}`);
         }
     }
 
-    export async function doFullUpload(notify: boolean = true) {
-        for (let category of UploadScheduler.categories) {
+    public async doFullUpload(notify: boolean = true) {
+        for (let category of this.categories) {
             await category.uploadAllAssets(notify);
         }
 
-        await new Promise<void>((resolve) => setTimeout(resolve, 5000)); // wait for 1 second to ensure all uploads are started
+        await AsyncSleep(5000); // wait for 5s to ensure all uploads are started
         if (notify) {
             await Notification.publishIdleNotification();
         }
     }
+
+    private doAddPhotoItem(photoItem: PhotoItem, addPosition: AddPosition) {
+        for (let category of this.categories) {
+            if (category.tryAddAsset(photoItem, addPosition) != AddAssetResult.Unmatched) {
+                break;
+            }
+        }
+    }
 }
+
+export const PhotoAssetsManager = new PhotoAssetsManagerImpl();

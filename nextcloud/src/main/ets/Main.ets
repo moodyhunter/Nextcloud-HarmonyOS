@@ -6,6 +6,7 @@ import { SyncFolderManager } from "./SyncEngine/SyncFolderManager";
 import { Logger } from "./Utils/Logger";
 import { DBManager } from "./Database/DBManager";
 import { NCommon } from "./Common";
+import { Account } from "./Account/Account";
 
 const TAG = 'Nextcloud/Init';
 
@@ -27,6 +28,14 @@ class NextcloudImpl {
         await this.dbManager.initDataStore(context, DEBUG ? DEBUG_DATABASE_NAME : DEFAULT_DATABASE_NAME);
         await this.dbManager.upgradeDatabase();
         await this.syncFolderManager.loadData();
+    }
+
+    public hasAccounts(): boolean {
+        return this.syncFolderManager.hasAccounts();
+    }
+
+    public getAccountById(accountId: number): Account {
+        return this.syncFolderManager.getAccountById(accountId);
     }
 }
 

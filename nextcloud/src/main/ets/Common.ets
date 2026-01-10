@@ -1,8 +1,6 @@
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { preferences } from '@kit.ArkData';
-import { common } from '@kit.AbilityKit';
 import { Logger } from './Utils/Logger';
-import util from '@ohos.util';
 
 
 const TAG = "Nextcloud-Common";
@@ -44,63 +42,39 @@ export const DEFAULT_CATEGORIES: NCommon.CategoryConfig[] = [
 ];
 
 
-const LOGIN_APP_PASSWORD = "login.appPassword";
-const LOGIN_USERNAME = "login.username";
-const LOGIN_SERVER = "login.server";
-const UPLOAD_BASE_DIRECTORY = "upload.baseDir";
-const UPLOAD_REPLACE_EXISTING = "upload.replaceExisting";
-const UPLOAD_CATEGORIES = "upload.categories";
+type LOGIN_APP_PASSWORD = "login.appPassword";
+type LOGIN_USERNAME = "login.username";
+type LOGIN_SERVER = "login.server";
+type UPLOAD_BASE_DIRECTORY = "upload.baseDir";
+type UPLOAD_REPLACE_EXISTING = "upload.replaceExisting";
+type UPLOAD_CATEGORIES = "upload.categories";
+
+type SETTINGS_KEYS =
+    LOGIN_APP_PASSWORD |
+    LOGIN_USERNAME |
+    LOGIN_SERVER |
+    UPLOAD_BASE_DIRECTORY |
+    UPLOAD_REPLACE_EXISTING |
+    UPLOAD_CATEGORIES;
 
 class NPreference {
-    static SETTINGS_KEYS: string[] = [
-        LOGIN_APP_PASSWORD,
-        LOGIN_USERNAME,
-        LOGIN_SERVER,
-        UPLOAD_BASE_DIRECTORY,
-        UPLOAD_REPLACE_EXISTING,
-        UPLOAD_CATEGORIES,
-    ];
     private pref: preferences.Preferences;
 
     constructor(context: Context) {
         this.pref = preferences.getPreferencesSync(context, { name: "nextcloud" });
     }
 
-    get password(): string {
-        return this.getPref(LOGIN_APP_PASSWORD, "");
-    }
-
-    set password(value: string) {
-        this.setPref(LOGIN_APP_PASSWORD, value);
-    }
-
-    get username(): string {
-        return this.getPref(LOGIN_USERNAME, "username");
-    }
-
-    set username(value: string) {
-        this.setPref(LOGIN_USERNAME, value);
-    }
-
-    get hostname(): string {
-        return this.getPref(LOGIN_SERVER, "nextcloud.com");
-    }
-
-    set hostname(value: string) {
-        this.setPref(LOGIN_SERVER, value);
-    }
-
     get replaceExistingFiles(): boolean {
-        return this.getPref(UPLOAD_REPLACE_EXISTING, false);
+        return this.getPref('upload.replaceExisting', false);
     }
 
     set replaceExistingFiles(doReplace: boolean) {
-        this.setPref(UPLOAD_REPLACE_EXISTING, doReplace);
+        this.setPref('upload.replaceExisting', doReplace);
     }
 
     get baseUploadDirectory(): string {
         const DEFAULT_VALUE = 'InstantUpload/';
-        let dir = this.getPref(UPLOAD_BASE_DIRECTORY, DEFAULT_VALUE);
+        let dir = this.getPref('upload.baseDir', DEFAULT_VALUE);
         if (dir === '') {
             dir = DEFAULT_VALUE;
         }
@@ -108,11 +82,11 @@ class NPreference {
     }
 
     set baseUploadDirectory(dir: string) {
-        this.setPref(UPLOAD_BASE_DIRECTORY, dir);
+        this.setPref('upload.baseDir', dir);
     }
 
     get categories(): NCommon.CategoryConfig[] {
-        let stringConfig = this.getPref(UPLOAD_CATEGORIES, "");
+        let stringConfig = this.getPref('upload.categories', "");
         if (stringConfig === "") {
             return DEFAULT_CATEGORIES;
         }
@@ -121,19 +95,10 @@ class NPreference {
 
     set categories(categories: NCommon.CategoryConfig[]) {
         let stringConfig = JSON.stringify(categories);
-        this.setPref(UPLOAD_CATEGORIES, stringConfig);
+        this.setPref('upload.categories', stringConfig);
     }
 
-    public hasLogon() {
-        return this.password !== '' && this.username !== '';
-    }
-
-    private getPref<T>(key: string, defaultValue: T): T {
-        if (!NPreference.SETTINGS_KEYS.includes(key)) {
-            Logger.Error(TAG, "Invalid preference key: " + key);
-            return defaultValue;
-        }
-
+    public getPref<T>(key: SETTINGS_KEYS, defaultValue: T): T {
         try {
             let value = this.pref.getSync(key, "") as T;
             if (value === null) {
@@ -148,12 +113,7 @@ class NPreference {
 
     }
 
-    private setPref(key: string, value: preferences.ValueType) {
-        if (!NPreference.SETTINGS_KEYS.includes(key)) {
-            Logger.Error(TAG, "Invalid preference key: " + key);
-            return;
-        }
-
+    private setPref(key: SETTINGS_KEYS, value: preferences.ValueType) {
         Logger.Info(TAG, "Storing value for " + key);
         try {
             this.pref.putSync(key, value);
@@ -188,27 +148,5 @@ export namespace NCommon {
     export function Initialise(context: Context) {
         Logger.Info(TAG, "Common initialised with User-Agent: " + UserAgent());
         Preference = new NPreference(context);
-    }
-
-    export function MakePreviewUrl(fileId: string, x: number = 64, y: number = 64): string {
-        return `https://${NCommon.Preference.username}:${NCommon.Preference.password}@${NCommon.Preference.hostname}`
-            + `/core/preview?fileId=${fileId}&x=${x}&y=${y}&mimeFallback=true`;
-    }
-
-    export function MakeDownloadUrl(filePath: string): string {
-        let encodedPath = encodeURI(filePath);
-        return `https://${NCommon.Preference.username}:${NCommon.Preference.password}@${NCommon.Preference.hostname}`
-            + `/remote.php/dav/files/${NCommon.Preference.username}/${encodedPath}`;
-    }
-
-    let Base64Util = new util.Base64Helper();
-    let Utf8Encoder = util.TextEncoder.create('utf-8');
-
-    function Base64Encode(msg: string): string {
-        return Base64Util.encodeToStringSync(Utf8Encoder.encodeInto(msg));
-    }
-
-    export function MakeAuthorization(): string {
-        return 'basic ' + Base64Encode(NCommon.Preference.username + ":" + NCommon.Preference.password);
     }
 }

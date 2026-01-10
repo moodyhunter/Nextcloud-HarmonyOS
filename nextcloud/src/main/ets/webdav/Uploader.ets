@@ -2,13 +2,14 @@ import { rcp } from '@kit.RemoteCommunicationKit';
 import { NCommon } from '../Common';
 import fs from '@ohos.file.fs';
 import { Logger } from '../Utils/Logger';
-import { TransferManager, TransferTask, TransferType } from '../TransferManager';
+import { TransferManager, TransferType } from '../TransferManager';
+import { Account } from '../Account/Account';
 
 
 const TAG = "Nextcloud-Upload";
 
 
-function CreateSession(extraHeaders?: Map<string, string>, eventsHandler?: rcp.HttpEventsHandler): rcp.Session {
+function CreateSession(account: Account, extraHeaders?: Map<string, string>, eventsHandler?: rcp.HttpEventsHandler): rcp.Session {
     let headers: rcp.RequestHeaders = {};
 
     if (extraHeaders !== undefined) {
@@ -17,7 +18,7 @@ function CreateSession(extraHeaders?: Map<string, string>, eventsHandler?: rcp.H
         }
     }
 
-    headers['authorization'] = NCommon.MakeAuthorization();
+    headers['authorization'] = account.makeAuthorizationHeader();
     headers['user-agent'] = NCommon.UserAgent();
     headers['accept'] = 'text/plains';
 
@@ -38,8 +39,8 @@ function CreateSession(extraHeaders?: Map<string, string>, eventsHandler?: rcp.H
     }
 }
 
-export async function Exists(session: rcp.Session, path: string, filename: string = ""): Promise<boolean> {
-    let fullPath = "https://" + NCommon.Preference.hostname + "/remote.php/dav/files/" + NCommon.Preference.username + "/" + path + "/" + filename;
+export async function Exists(session: rcp.Session, account: Account, path: string, filename: string = ""): Promise<boolean> {
+    let fullPath = account.remoteBaseDirUrl() + path + "/" + filename;
     Logger.Info(TAG, "Checking if path exists: " + fullPath);
 
     try {
@@ -60,9 +61,9 @@ export async function Exists(session: rcp.Session, path: string, filename: strin
     }
 }
 
-export async function CreatePath(path: string): Promise<number> {
-    let session = CreateSession();
-    if (await Exists(session, path)) {
+export async function CreatePath(account: Account, path: string): Promise<number> {
+    let session = CreateSession(account);
+    if (await Exists(session, account, path)) {
         Logger.Info(TAG, "Path already exists: " + path);
         session.close();
         return 201;
@@ -75,7 +76,7 @@ export async function CreatePath(path: string): Promise<number> {
         if (!thisLevel) {
             continue;
         }
-        let fullPath = "https://" + NCommon.Preference.hostname + "/remote.php/dav/files/" + NCommon.Preference.username + "/" + thisLevel + "/";
+        let fullPath = account.remoteBaseDirUrl() + thisLevel + "/";
         try {
             let resp = await session.fetch(new rcp.Request(fullPath, "MKCOL", {}));
             Logger.Info(TAG, `Create path '${thisLevel}', response: ${resp.statusCode}`);
@@ -95,7 +96,7 @@ export async function CreatePath(path: string): Promise<number> {
     return respCode;
 }
 
-export async function DownloadFile(relativePath: string, localPath: string): Promise<void> {
+export async function DownloadFile(account: Account, relativePath: string, localPath: string): Promise<void> {
     let task = TransferManager.addTransferTask(TransferType.DOWNLOAD, relativePath);
 
     let eventsHandler: rcp.HttpEventsHandler = {
@@ -104,16 +105,13 @@ export async function DownloadFile(relativePath: string, localPath: string): Pro
         }
     };
 
-    let session = CreateSession(undefined, eventsHandler);
+    let session = CreateSession(account, undefined, eventsHandler);
     let downloadToFileOptions: rcp.DownloadToFile = {
         kind: "file",
         file: localPath,
     };
 
-    await session.downloadToFile(
-        "https://" + NCommon.Preference.hostname + "/remote.php/dav/files/" + NCommon.Preference.username + "/" + relativePath,
-        downloadToFileOptions
-    ).then(() => {
+    await session.downloadToFile(account.remoteBaseDirUrl() + relativePath, downloadToFileOptions).then(() => {
         task.updateProgress(task.totalSize, task.totalSize);
     }).catch((error: BusinessError) => {
         Logger.Error(TAG, `Download failed: ${relativePath}, error: ${JSON.stringify(error)}`);
@@ -122,13 +120,13 @@ export async function DownloadFile(relativePath: string, localPath: string): Pro
     session.close();
 }
 
-export async function UploadFile(filename: string, mTime: number, path: string, uri: string): Promise<number> {
+export async function UploadFile(account: Account, filename: string, mTime: number, path: string, uri: string): Promise<number> {
     let extraHeaders = new Map<string, string>();
     extraHeaders.set('X-OC-MTime', `${Math.round(mTime / 1000)}`);
-    let session = CreateSession(extraHeaders);
+    let session = CreateSession(account, extraHeaders);
 
     if (!NCommon.Preference.replaceExistingFiles) {
-        if (await Exists(session, path, filename)) {
+        if (await Exists(session, account, path, filename)) {
             Logger.Info(TAG, `file already exists: ${filename}, not replacing as per settings`);
             session.close();
             return 204; // No Content, file already exists
@@ -145,7 +143,7 @@ export async function UploadFile(filename: string, mTime: number, path: string, 
         throw error as Error;
     }
 
-    let fullpath = "https://" + NCommon.Preference.hostname + "/remote.php/dav/files/" + NCommon.Preference.username + "/" + path + "/" + filename;
+    let fullpath = account.remoteBaseDirUrl() + path + "/" + filename;
     Logger.Info(TAG, "Uploading file to " + fullpath);
 
     let ret = -1;

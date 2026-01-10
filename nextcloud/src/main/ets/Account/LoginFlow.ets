@@ -1,34 +1,34 @@
 import { Logger } from '../Utils/Logger';
 import { Configuration, CoreClientFlowLoginV2Api, CoreLoginFlowV2Credentials } from '../nextcloud-api-sdk';
-import { NCommon } from '../Common';
 import { AxiosError } from '@ohos/axios';
 import { AsyncSleep } from '../Utils/CommonUtils';
+import { Err, Ok, Result } from '../Utils/Result';
+import { Account } from './Account';
+import { NCommon } from '../Common';
 
 const TAG = 'Account/Login';
 
-interface InitLoginResult {
-    success: boolean;
-    loginUrl?: string;
-    errorMsg?: string;
-};
-
-interface PollLoginResult {
-    cancelled: boolean;
-    loginName: string;
+interface PollLoginResultOk {
+    kind: "ok";
+    account: Account;
 }
 
-class LoginProcess {
+interface PollLoginResultCancelled {
+    kind: "cancelled";
+}
+
+type PollLoginResult = PollLoginResultOk | PollLoginResultCancelled;
+
+export class LoginFlow {
     private loginApi: CoreClientFlowLoginV2Api | null = null;
-    private token: string = "";
+    private token: string = '';
     private cancelled: boolean = false;
+    private hostname: string = '';
 
-    hasAppPassword(): boolean {
-        return NCommon.Preference.password !== "";
-    }
-
-    async initLogin(): Promise<InitLoginResult> {
+    async initLogin(hostname: string): Promise<Result<string, string>> {
+        this.hostname = hostname;
         let apiConfig = new Configuration({
-            basePath: "https://" + NCommon.Preference.hostname,
+            basePath: "https://" + hostname,
             baseOptions: {
                 headers: { "User-Agent": NCommon.UserAgent() },
             }
@@ -38,14 +38,14 @@ class LoginProcess {
         try {
             let flow = (await this.loginApi.coreClientFlowLoginV2Init()).data;
             this.token = flow.poll.token;
-            return { success: true, loginUrl: flow.login };
+            return Ok(flow.login);
         } catch (e) {
-            let axiosError: AxiosError = e as AxiosError;
             Logger.Error(TAG, "LoginV2Init failed: " + JSON.stringify(e));
+            let axiosError: AxiosError = e as AxiosError;
             if (Number(axiosError.code) === 2300006) {
-                return { success: false, errorMsg: (JSON.parse(axiosError.message) as Error).message };
+                return Err((JSON.parse(axiosError.message) as Error).message);
             } else {
-                return { success: false, errorMsg: axiosError.message };
+                return Err("Network error");
             }
         }
     }
@@ -57,23 +57,19 @@ class LoginProcess {
     async loginPollRepeatedly(): Promise<PollLoginResult> {
         Logger.Info(TAG, "Polling for login result...");
         this.cancelled = false;
-        let result = await this.loginPollOnce();
-        while (!result) {
+
+        let result: CoreLoginFlowV2Credentials | null;
+        do {
             if (this.cancelled) {
-                return {
-                    loginName: '',
-                    cancelled: true
-                };
+                return { kind: "cancelled" };
             }
             await AsyncSleep(1500);
             result = await this.loginPollOnce();
-        }
+        } while (result === null);
 
-        NCommon.Preference.password = result.appPassword;
-        NCommon.Preference.username = result.loginName;
         return {
-            cancelled: false,
-            loginName: result.loginName,
+            kind: 'ok',
+            account: Account.createNewAccount(this.hostname, result.loginName, result.appPassword)
         };
     }
 
@@ -86,5 +82,3 @@ class LoginProcess {
         }
     }
 }
-
-export { LoginProcess };

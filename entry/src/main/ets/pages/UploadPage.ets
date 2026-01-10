@@ -2,7 +2,7 @@ import { Logger, NCommon } from 'nextcloud';
 import { Category } from '../models/Category';
 import { LengthMetrics } from '@kit.ArkUI';
 import { PhotoItem, UploadStatus } from '../models/PhotoItem';
-import { UploadScheduler } from '../utils/UploadScheduler';
+import { PhotoAssetsManager } from '../utils/PhotoAssetsManager';
 
 const TAG = "Page-UploadPage"
 
@@ -106,7 +106,7 @@ struct PhotosGridView {
 @Preview
 @Component
 export struct UploadPage {
-    @State private categories: Category[] = UploadScheduler.categories;
+    @State private categories: Category[] = PhotoAssetsManager.categories;
 
     build() {
         Tabs() {

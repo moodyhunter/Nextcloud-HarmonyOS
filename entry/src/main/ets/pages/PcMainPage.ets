@@ -1,4 +1,4 @@
-import { DirectoryEntry, ListFiles, Logger, DownloadFile } from 'nextcloud';
+import { DirectoryEntry, ListFiles, Logger, DownloadFile, Nextcloud, Account } from 'nextcloud';
 import { common } from '@kit.AbilityKit';
 import { fileIo, fileShare, fileUri, picker } from '@kit.CoreFileKit';
 import { Constants } from '../utils/Common';
@@ -41,6 +41,8 @@ struct PCAbility {
     @StorageLink(Constants.PC_CLOUD_DISK_ALIAS) @Watch('onAliasChanged') private alias: string = 'Moody 的 Nextcloud';
     @State private opHistory: CloudSyncApi.FileChangeInfo[] = [];
     @State private files: DirectoryEntry[] = [];
+    @StorageLink(Constants.PHONE_ACTIVE_ACCOUNT_ID) private readonly activeAccountId: number = 0;
+    @State private readonly account: Account = Nextcloud.getAccountById(this.activeAccountId);
     @State private transferManager: TransferManagerImpl = TransferManager;
     private downloadQueue: DownloadQueue = new DownloadQueue();
     private pendingMoveTo: Map<string, string> = new Map();
@@ -51,11 +53,7 @@ struct PCAbility {
 
     async aboutToAppear(): Promise<void> {
         Logger.Info(TAG, `pcAbility aboutToAppear`);
-        await PermissionManager.RequestPermission(
-            this.getUIContext()!
-                .getHostContext()!,
-            "ohos.permission.FILE_ACCESS_PERSIST"
-        )
+        await PermissionManager.RequestPermission(this.getUIContext(), ["ohos.permission.FILE_ACCESS_PERSIST"])
         if (this.path) {
             CloudSyncApi.connect(this.path);
         }
@@ -84,7 +82,7 @@ struct PCAbility {
         } catch (e) {
             Logger.Error(TAG, `failed to activate: ${JSON.stringify(e)}`);
         }
-        this.files = await ListFiles('/');
+        this.files = await ListFiles(this.account, '/');
     }
 
     aboutToDisappear(): void {
@@ -166,13 +164,13 @@ struct PCAbility {
 
                     Button('reload')
                         .onClick(async () => {
-                            this.files = await ListFiles('/');
+                            this.files = await ListFiles(this.account, '/');
                         })
 
                     Button('sync all')
                         .onClick(async () => {
                             Logger.Info(TAG, `sync all`);
-                            this.downloadQueue.addRootDir();
+                            this.downloadQueue.addRootDir(this.account);
                             while (this.downloadQueue.hasPendingItem()) {
                                 let next = await this.downloadQueue.getNextDownloadFile();
                                 if (next === undefined) {
@@ -185,7 +183,7 @@ struct PCAbility {
                                     } catch (e) {
                                     }
                                 } else {
-                                    await DownloadFile(next.relativePath, this.path + '/' + next.relativePath);
+                                    await DownloadFile(this.account, next.relativePath, this.path + '/' + next.relativePath);
                                 }
                                 Logger.Info(TAG, next.relativePath);
                             }

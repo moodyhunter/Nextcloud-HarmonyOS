@@ -1,4 +1,4 @@
-import { Logger, NCommon } from 'nextcloud';
+import { Logger, NCommon, Account } from 'nextcloud';
 import { LengthMetrics } from '@kit.ArkUI';
 
 const TAG = 'pages/Settings';
@@ -19,6 +19,7 @@ class EditableCategory implements NCommon.CategoryConfig {
 @Component
 export struct SettingsPage {
     scroller: Scroller = new Scroller();
+    @ObjectLink public currentAccount: Account;
     @State private username: string = "<username>";
     @State private hostname: string = "<hostname>";
     @State private uploadReplaceExisting: boolean = false;
@@ -158,8 +159,8 @@ export struct SettingsPage {
 
     private doLoadSettings() {
         if (NCommon.Preference) {
-            this.username = NCommon.Preference.username;
-            this.hostname = NCommon.Preference.hostname;
+            this.username = this.currentAccount.username;
+            this.hostname = this.currentAccount.hostname;
             this.uploadReplaceExisting = NCommon.Preference.replaceExistingFiles;
             this.uploadBaseDirectory = NCommon.Preference.baseUploadDirectory;
             this.uploadCategories = [];
@@ -173,8 +174,6 @@ export struct SettingsPage {
 
     private doSaveSettings() {
         if (NCommon.Preference) {
-            NCommon.Preference.username = this.username;
-            NCommon.Preference.hostname = this.hostname;
             NCommon.Preference.replaceExistingFiles = this.uploadReplaceExisting;
             NCommon.Preference.baseUploadDirectory = this.uploadBaseDirectory;
             NCommon.Preference.categories = this.uploadCategories;

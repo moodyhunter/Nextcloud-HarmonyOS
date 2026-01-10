@@ -1,4 +1,4 @@
-import { Logger, NCommon } from 'nextcloud';
+import { Account, Logger, NCommon, Nextcloud } from 'nextcloud';
 import { App, promptAction } from '@kit.ArkUI';
 import { Path } from '../utils/Path';
 import { UploadPage } from './UploadPage';
@@ -7,8 +7,10 @@ import { SettingsPage } from './SettingsPage';
 import { FolderPage } from './FolderPage';
 import { Constants, FolderViewMode } from '../utils/Common';
 import { PermissionManager } from '../utils/PermissionManager';
-import { UploadScheduler } from '../utils/UploadScheduler';
+import { PhotoAssetsManager } from '../utils/PhotoAssetsManager';
 import { PhotoMonitor } from '../utils/PhotoMonitor';
+import { ShowToast } from '../utils/Utils';
+import { Permissions } from '@kit.AbilityKit';
 
 const TAG = "Page-Index";
 
@@ -20,6 +22,8 @@ struct Index {
     @State currentIndex: number = 0;
     @StorageLink(Constants.VIEW_MODE_KEY) viewMode: FolderViewMode = FolderViewMode.TwoColumns;
     @Provide('FolderList.PathStack') pathStack: NavPathStack = new NavPathStack();
+    @StorageLink(Constants.PHONE_ACTIVE_ACCOUNT_ID) private readonly activeAccountId: number = 0;
+    @State private readonly account: Account = Nextcloud.getAccountById(this.activeAccountId);
     @State private loginPageDialogId: number = 0;
     private backedOnce: boolean = false;
 
@@ -41,39 +45,35 @@ struct Index {
                 this.backedOnce = false;
             }, EXIT_TOAST_DURATION);
 
-            try {
-                this.getUIContext().getPromptAction().showToast({
-                    message: $r('app.string.swipe_back_again_to_exit'),
-                    duration: EXIT_TOAST_DURATION,
-                });
-            } catch (error) {
-                Logger.Error(TAG, `Failed to show toast?`);
-            }
+            ShowToast(this.getUIContext(), $r('app.string.swipe_back_again_to_exit'), EXIT_TOAST_DURATION);
             return true;
         }
     }
 
     async aboutToAppear() {
         Logger.Info(TAG, `aboutToAppear`);
-        let context = this.getUIContext().getHostContext()!;
-        let result1 = await PermissionManager.RequestPermission(context, 'ohos.permission.READ_IMAGEVIDEO');
-        Logger.Info(TAG, `Request permission result: ${result1}`);
-        let result2 = await PermissionManager.RequestPermission(context, 'ohos.permission.MEDIA_LOCATION');
-        Logger.Info(TAG, `Request permission result: ${result2}`);
-        UploadScheduler.initialize();
+        let context = this.getUIContext();
+        const PERMISSIONS: Permissions[] = [
+            'ohos.permission.READ_IMAGEVIDEO',
+            'ohos.permission.MEDIA_LOCATION',
+        ];
+        let result = await PermissionManager.RequestPermission(context, PERMISSIONS);
+        Logger.Info(TAG, `Request permission result: ${result}`);
+        PhotoAssetsManager.initialize(NCommon.Preference.categories);
         PhotoMonitor.beginMonitorPhotoChange();
     }
 
     async doLogin() {
+        let context = this.getUIContext();
+        let options: promptAction.CustomDialogOptions = {
+            builder: () => {
+                return this.LoginPageDialog();
+            },
+            isModal: true,
+            autoCancel: false,
+        };
+
         try {
-            let context = this.getUIContext();
-            let options: promptAction.CustomDialogOptions = {
-                builder: () => {
-                    this.LoginPageDialog()
-                },
-                isModal: true,
-                autoCancel: false,
-            };
             this.loginPageDialogId = await context.getPromptAction().openCustomDialog(options);
             Logger.Info(TAG, `done`);
         } catch (error) {
@@ -86,7 +86,7 @@ struct Index {
         App.setImageRawDataCacheSize(1024 * 1024 * 100); // 100MB
         App.setImageFileCacheSize(1024 * 1024 * 500); // 100MB
 
-        if (!NCommon.Preference.hasLogon()) {
+        if (!Nextcloud.hasAccounts()) {
             this.doLogin();
         }
     }
@@ -96,7 +96,7 @@ struct Index {
             TabContent() {
                 Flex({ direction: FlexDirection.Column }) {
                     Navigation(this.pathStack) {
-                        FolderPage({ currentPath: new Path() })
+                        FolderPage({ account: this.account, currentPath: new Path() })
                     }
                     .navBarWidth(0)
                     .mode(NavigationMode.Stack)
@@ -126,7 +126,7 @@ struct Index {
             .tabBar($r('app.string.tab_upload'))
 
             TabContent() {
-                SettingsPage()
+                SettingsPage({ currentAccount: this.account })
                     .width('100%')
                     .height('100%')
             }

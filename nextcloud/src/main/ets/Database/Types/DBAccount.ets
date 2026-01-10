@@ -1,21 +1,21 @@
 import { Logger } from '../../Utils/Logger';
-import { DBObject, ColumnDescriptors, DBObjectCreator } from '../DBManager';
+import { DBItem, ColumnDescriptors, DBObjectCreator } from '../DBManager';
 import { relationalStore } from '@kit.ArkData';
 
 const TAG = 'Database/DBAccount';
 
-export class DBAccount implements DBObject {
+export class DBAccount implements DBItem {
     static readonly DB_TABLE_NAME: string = 'Accounts';
     id: number;
     username: string;
     password: string;
     hostname: string;
 
-    constructor(id: number, username: string, password: string, hostname: string) {
+    constructor(id: number, hostname: string, username: string, password: string) {
         this.id = id;
+        this.hostname = hostname;
         this.username = username;
         this.password = password;
-        this.hostname = hostname;
     }
 
     public getTableName(): string {
@@ -43,7 +43,7 @@ class DBAccountFactoryImpl implements DBObjectCreator<DBAccount> {
         let username = bucket['username'] as string;
         let password = bucket['password'] as string;
         let hostname = bucket['hostname'] as string;
-        return new DBAccount(id, username, password, hostname);
+        return new DBAccount(id, hostname, username, password);
     }
 
     getColumnDesc(): ColumnDescriptors {

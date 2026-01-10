@@ -1,16 +1,18 @@
-import { DirectoryEntry, Logger, NCommon } from 'nextcloud';
+import { Account, DirectoryEntry, Logger } from 'nextcloud';
 import { Path } from '../utils/Path';
 
 const TAG: string = "Page-PreviewPage";
 
 export let PREVIEW_PAGE_NAME: string = "PreviewPage";
 
+
 @Component
 struct PreviewPage {
+    @ObjectLink account: Account;
     @Prop entry: DirectoryEntry;
     @Prop fullPath: Path = new Path();
     @State private previewLoaded: boolean = false;
-    @State private previewLink: string = NCommon.MakePreviewUrl(this.entry.fileId, 100, 100);
+    @State private previewLink: string = this.account.getPreviewUrl(this.entry.fileId, 100, 100);
     @State @Watch('onPreviewLevelChanged') private previewLevel: number = 0;
     @State private failedToLoad: boolean = false;
     @State private failedReason: string = "";
@@ -48,9 +50,9 @@ struct PreviewPage {
                         if (this.previewLevel == 2) {
                             Logger.Info(TAG, "Preview image loaded, start loading full image");
                             if (this.entry.mime.startsWith("image/")) {
-                                this.previewLink = NCommon.MakeDownloadUrl(this.fullPath.path(false));
+                                this.previewLink = this.account.getDownloadUrl(this.fullPath.path(false));
                             } else {
-                                this.previewLink = NCommon.MakePreviewUrl(this.entry.fileId, 1000, 1000);
+                                this.previewLink = this.account.getPreviewUrl(this.entry.fileId, 1000, 1000);
                             }
                         }
                     })
@@ -126,9 +128,10 @@ struct PreviewPage {
 export interface PreviewPageProps {
     entry: DirectoryEntry;
     fullPath: Path;
+    account: Account;
 }
 
 @Builder
 export function PreviewPageBuilder(_name: string, props: PreviewPageProps) {
-    PreviewPage(props);
+    PreviewPage({ account: props.account, entry: props.entry, fullPath: props.fullPath });
 }

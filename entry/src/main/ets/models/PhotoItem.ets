@@ -1,11 +1,11 @@
 import { photoAccessHelper as PHelper } from '@kit.MediaLibraryKit';
-import { CreatePath, Logger, UploadFile } from 'nextcloud';
+import { CreatePath, Logger, Nextcloud, UploadFile } from 'nextcloud';
 import { promptAction } from '@kit.ArkUI';
 import { FormatTime } from '../utils/Utils';
 import { image } from '@kit.ImageKit';
 
 const TAG = 'PhotoItem';
-const DEFAULT_FORMAT = 'yyyy/MM/';  
+const DEFAULT_FORMAT = 'yyyy/MM/';
 
 export enum UploadStatus {
     None,
@@ -25,6 +25,11 @@ export enum UploadResult {
 export class PhotoItem {
     uploadStatus: UploadStatus = UploadStatus.None;
     private innerAsset: PHelper.PhotoAsset;
+    // BEGIN hack
+    private readonly activeAccountId: number = 0;
+    private readonly account = Nextcloud.getAccountById(this.activeAccountId);
+
+    // END hack
 
     constructor(asset: PHelper.PhotoAsset) {
         this.innerAsset = asset;
@@ -69,7 +74,7 @@ export class PhotoItem {
     async upload(targetPath: string): Promise<UploadResult> {
         this.uploadStatus = UploadStatus.Uploading;
         let path = targetPath + FormatTime(this.dateTaken, DEFAULT_FORMAT);
-        let mkdirResult = await CreatePath(path);
+        let mkdirResult = await CreatePath(this.account, path);
         if (mkdirResult !== 201 && mkdirResult !== 409 && mkdirResult !== 405) {
             // 405 is the status code for "already exists"
             Logger.Error(TAG, `Failed to create path: ${path}`);
@@ -82,7 +87,7 @@ export class PhotoItem {
         let ret: UploadResult = UploadResult.FAILED;
 
         let message = "";
-        let uploadResult = await UploadFile(this.displayName, this.dateTakenMs, path, this.uri);
+        let uploadResult = await UploadFile(this.account, this.displayName, this.dateTakenMs, path, this.uri);
         if (uploadResult !== 201 && uploadResult !== 204) {
             message = `Failed: ${this.displayName}: ${uploadResult}`;
             this.uploadStatus = UploadStatus.Failed;
