@@ -1,15 +1,15 @@
 // Describes the root sync folder that's in the system
 import { Account } from "../Account/Account";
-import { DBSyncFolder } from "../Database/Types/DBSyncFolder";
+import { DBLocalSyncFolder } from "../Database/Types/DBLocalSyncFolder";
 
 const TAG = 'SyncEngine/SyncFolder';
 
 export class SyncFolder {
     ownerAccount: Account;
-    dbSyncFolder: DBSyncFolder;
+    dbSyncFolder: DBLocalSyncFolder;
     syncTimerId: number = 0;
 
-    constructor(dbSyncFolder: DBSyncFolder, account: Account) {
+    constructor(dbSyncFolder: DBLocalSyncFolder, account: Account) {
         this.dbSyncFolder = dbSyncFolder;
         this.ownerAccount = account;
     }

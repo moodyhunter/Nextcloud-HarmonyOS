@@ -37,6 +37,10 @@ class NextcloudImpl {
     public getAccountById(accountId: number): Account {
         return this.syncFolderManager.getAccountById(accountId);
     }
+
+    public async recreateDatabase() {
+        await this.dbManager.dropDatabase();
+    }
 }
 
 export async function InitialiseNextcloud(context: Context): Promise<void> {

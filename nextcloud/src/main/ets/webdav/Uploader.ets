@@ -2,12 +2,10 @@ import { rcp } from '@kit.RemoteCommunicationKit';
 import { NCommon } from '../Common';
 import fs from '@ohos.file.fs';
 import { Logger } from '../Utils/Logger';
-import { TransferManager, TransferType } from '../TransferManager';
+import { TransferManager, TransferType } from '../SyncEngine/TransferManager';
 import { Account } from '../Account/Account';
 
-
-const TAG = "Nextcloud-Upload";
-
+const TAG = "webdav/Upload";
 
 function CreateSession(account: Account, extraHeaders?: Map<string, string>, eventsHandler?: rcp.HttpEventsHandler): rcp.Session {
     let headers: rcp.RequestHeaders = {};

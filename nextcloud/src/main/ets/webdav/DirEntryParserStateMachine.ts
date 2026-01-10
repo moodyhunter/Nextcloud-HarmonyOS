@@ -1,9 +1,9 @@
 import { DAV_PROPERTY_TYPES, DavPropsType, DavResponse, DavResponseRoot } from './DavTypes';
 import { Logger } from '../Utils/Logger';
 
-const TAG = "Nextcloud-DirEntryParser";
+const TAG = 'webdav/DirEntryParserStateMachine';
 
-interface DirectoryEntry {
+export interface DirectoryEntry {
   name: string;
   isDirectory: boolean;
   mime: string;
@@ -23,7 +23,7 @@ enum ParserStatus {
   Final,
 };
 
-class DirEntryParserStateMachine {
+export class DirEntryParserStateMachine {
   private state: ParserStatus = ParserStatus.MultiStatus;
 
   private response_root: DavResponseRoot;
@@ -193,5 +193,3 @@ class DirEntryParserStateMachine {
     return entries;
   }
 }
-
-export { DirectoryEntry, DirEntryParserStateMachine };

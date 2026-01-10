@@ -16,7 +16,7 @@ export { BasicDataSource } from './Utils/BasicDatasource';
 
 export { FilesDataSource } from './Utils/FilesDataSource';
 
-export { TransferManager, TransferManagerImpl, TransferTask, TransferType } from './TransferManager';
+export { TransferManager, TransferManagerImpl, TransferTask, TransferType } from './SyncEngine/TransferManager';
 
 export { CreatePath, UploadFile, DownloadFile } from './webdav/Uploader';
 

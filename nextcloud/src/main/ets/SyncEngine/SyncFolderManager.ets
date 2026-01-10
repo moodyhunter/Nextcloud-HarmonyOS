@@ -2,10 +2,10 @@
 import { Logger } from '../Utils/Logger';
 import { DBManager } from '../Database/DBManager';
 import { Account } from '../Account/Account';
-import { DBAccount, DBAccountFactory } from '../Database/Types/DBAccount';
+import { DBAccount, DBAccountTableInfo as DBAccountTable } from '../Database/Types/DBAccount';
 import { NCommon } from '../Common';
-import { DBSyncFolderFactory } from '../Database/Types/DBSyncFolder';
 import { SyncFolder } from './SyncFolder';
+import { DBLocalSyncFolderTableInfo as DBLocalSyncFolderTable } from '../Database/Types/DBLocalSyncFolder';
 
 const TAG = 'SyncEngine/SyncFolderManager';
 
@@ -37,7 +37,7 @@ export class SyncFolderManager {
     }
 
     private async loadSyncFolders() {
-        let dbFolders = await this.dbManager.getItems(DBSyncFolderFactory);
+        let dbFolders = await this.dbManager.getItems(DBLocalSyncFolderTable);
         for (let dbFolder of dbFolders) {
             let ownerAccount = this.accounts.get(dbFolder.accountId);
             if (!ownerAccount) {
@@ -50,7 +50,7 @@ export class SyncFolderManager {
     }
 
     private async loadAccounts(): Promise<void> {
-        let dbAccounts = await this.dbManager.getItems(DBAccountFactory);
+        let dbAccounts = await this.dbManager.getItems(DBAccountTable);
         for (let dbAccount of dbAccounts) {
             let account = new Account(dbAccount);
             this.accounts.set(dbAccount.id, account);

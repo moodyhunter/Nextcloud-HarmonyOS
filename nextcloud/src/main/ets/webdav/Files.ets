@@ -5,7 +5,7 @@ import { xml } from '@kit.ArkTS';
 import { DirectoryEntry, DirEntryParserStateMachine } from './DirEntryParserStateMachine';
 import { Account } from '../Account/Account';
 
-const TAG = "Nextcloud-Files";
+const TAG = 'webdav/Files';
 
 let session: rcp.Session | null = null;
 

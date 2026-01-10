@@ -23,7 +23,7 @@ struct TransferProgressItem {
                 .textAlign(TextAlign.End)
 
             Progress({
-                value: this.transferTask.transferedSize,
+                value: this.transferTask.transferredSize,
                 total: this.transferTask.totalSize,
             })
 

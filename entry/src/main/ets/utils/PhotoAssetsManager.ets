@@ -72,6 +72,7 @@ class PhotoAssetsManagerImpl {
     }
 
     public async doFullUpload(notify: boolean = true) {
+        Logger.Info(TAG, `doFullUpload enter, notify: ${notify}`);
         for (let category of this.categories) {
             await category.uploadAllAssets(notify);
         }

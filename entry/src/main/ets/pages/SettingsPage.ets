@@ -1,5 +1,7 @@
-import { Logger, NCommon, Account } from 'nextcloud';
+import { Account, Logger, NCommon, Nextcloud } from 'nextcloud';
 import { LengthMetrics } from '@kit.ArkUI';
+import application from '@ohos.app.ability.application';
+import { ShowToast } from '../utils/Utils';
 
 const TAG = 'pages/Settings';
 
@@ -111,7 +113,7 @@ export struct SettingsPage {
                             .fontWeight(FontWeight.Bold)
                             .fontSize($r('sys.float.subheader_title_font_size'))
 
-                        ForEach(this.uploadCategories, (category: EditableCategory, index: number) => {
+                        ForEach(this.uploadCategories, (category: EditableCategory, _index: number) => {
                             Column({ space: 4 }) {
                                 Row() {
                                     Text(category.name)
@@ -148,11 +150,20 @@ export struct SettingsPage {
             Button($r('app.string.save_settings'), { stateEffect: true })
                 .onClick(() => {
                     this.doSaveSettings();
-                    this.getUIContext().getPromptAction().showToast({
-                        message: 'settings saved'
-                    });
+                    ShowToast(this.getUIContext(), 'settings saved');
                 })
                 .margin({ top: 16, bottom: 16 })
+
+            Button('DROP DATABASE')
+                .buttonStyle(ButtonStyleMode.EMPHASIZED)
+                .onClick(async () => {
+                    await Nextcloud.recreateDatabase();
+                    try {
+                        await application.getApplicationContext().killAllProcesses();
+                    } catch (error) {
+                        Logger.Error(TAG, `failed to kill all processes: ${JSON.stringify(error)}`);
+                    }
+                })
         }
         .height('100%')
     }

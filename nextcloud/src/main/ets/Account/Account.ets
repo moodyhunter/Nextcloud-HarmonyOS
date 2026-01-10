@@ -4,14 +4,24 @@ import { Logger } from '../Utils/Logger';
 
 const TAG = 'Account/Account';
 
-export class Account extends DBAccount {
+export class Account {
+    dbAccount: DBAccount;
+
     constructor(dbAccount: DBAccount) {
         Logger.Info(TAG, `constructor: enter`);
-        super(dbAccount.id, dbAccount.hostname, dbAccount.username, dbAccount.password);
+        this.dbAccount = dbAccount;
+    }
+
+    public get username(): string {
+        return this.dbAccount.username;
+    }
+
+    public get hostname(): string {
+        return this.dbAccount.hostname;
     }
 
     private get baseUrlWithCredentials(): string {
-        return `https://${this.username}:${this.password}@${this.hostname}`;
+        return `https://${this.dbAccount.username}:${this.dbAccount.password}@${this.dbAccount.hostname}`;
     }
 
     public static createNewAccount(hostname: string, username: string, password: string): Account {
@@ -21,15 +31,15 @@ export class Account extends DBAccount {
     }
 
     public isLoggedIn(): boolean {
-        return this.password !== '';
+        return this.dbAccount.password !== '';
     }
 
     public makeAuthorizationHeader(): string {
-        return 'basic ' + Base64Encode(this.username + ":" + this.password);
+        return 'basic ' + Base64Encode(this.dbAccount.username + ":" + this.dbAccount.password);
     }
 
     public remoteBaseDirUrl(): string {
-        return `https://${this.hostname}/remote.php/dav/files/${this.username}/`;
+        return `https://${this.dbAccount.hostname}/remote.php/dav/files/${this.dbAccount.username}/`;
     }
 
     public getPreviewUrl(fileId: string, x: number = 64, y: number = 64): string {
@@ -38,6 +48,6 @@ export class Account extends DBAccount {
 
     public getDownloadUrl(path: string): string {
         let encodedPath = encodeURI(path);
-        return this.baseUrlWithCredentials + `/remote.php/dav/files/${this.username}/${encodedPath}`;
+        return this.baseUrlWithCredentials + `/remote.php/dav/files/${this.dbAccount.username}/${encodedPath}`;
     }
 }

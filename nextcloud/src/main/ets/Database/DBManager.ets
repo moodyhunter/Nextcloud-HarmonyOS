@@ -1,60 +1,67 @@
 import { relationalStore } from '@kit.ArkData';
 import { Logger } from '../Utils/Logger';
-import { DBAccountFactory } from './Types/DBAccount';
-import { DBSyncFolderFactory } from './Types/DBSyncFolder';
+import { DBAccountTableInfo } from './Types/DBAccount';
+import { DBLocalSyncFolderTableInfo } from './Types/DBLocalSyncFolder';
+import { DBRemoteFolderTable } from './Types/DBRemoteFolder';
+import { DEBUG } from '../../../../BuildProfile';
 
 const TAG = 'Database/DBManager';
 
+const CAN_RECREATE_DATABASE = false;
+
+interface ForeignKeyDescriptor {
+    target: DBTableDescriptor<string, DBItem>;
+    targetColumn: ColumnDescriptor;
+}
+
 export interface ColumnDescriptor {
-    column: string; ///< Column name
     type: string; ///< Data type (e.g., INTEGER, TEXT)
     attrs?: string; ///< Additional attributes (e.g., PRIMARY KEY, NOT NULL)
+    foreignKey?: ForeignKeyDescriptor;
 }
 
-export type ColumnDescriptors = ColumnDescriptor[];
-
-interface DBGetTableName {
-    getTableName(): string;
-}
-
-interface DBTableDescriptor extends DBGetTableName {
-    getColumnDesc(): ColumnDescriptors;
+export interface DBTableDescriptor<TColumnName extends string, TItem> {
+    readonly tableName: string,
+    readonly columns: Record<TColumnName, ColumnDescriptor>;
+    readonly createItemFromBucket: (bucket: relationalStore.ValuesBucket) => TItem;
 }
 
 /**
  * Interface for database items that can be converted to a ValuesBucket.
  */
-export interface DBItem extends DBGetTableName {
+export interface DBItem {
+    getTableName(): string;
+
     toBucket(): relationalStore.ValuesBucket;
 }
 
-/**
- * Interface for creating database objects from a ValuesBucket.
- */
-export interface DBObjectCreator<T extends DBItem> extends DBTableDescriptor {
-    createFromBucket(bucket: relationalStore.ValuesBucket): T;
-}
+const TABLES: DBTableDescriptor<string, DBItem>[] = [
+    DBAccountTableInfo,
+    DBRemoteFolderTable,
+    DBLocalSyncFolderTableInfo,
+];
 
 export class DBManager {
     store: relationalStore.RdbStore | undefined = undefined;
 
-    static generateTableCreationScript(descriptor: DBTableDescriptor): string {
+    static generateTableCreationScript(tableName: string, columnDesc: Record<string, ColumnDescriptor>): string {
+        let foreignKeyDefs: string[] = [];
         let columnsDef: string[] = [];
-        for (let col of descriptor.getColumnDesc()) {
-            let colDef = `${col.column} ${col.type}`;
-            if (col.attrs) {
-                colDef += ` ${col.attrs}`;
+        for (let colName of Object.keys(columnDesc)) {
+            let colDesc = columnDesc[colName];
+            let colDef = `${colName} ${colDesc.type}`;
+            if (colDesc.attrs) {
+                colDef += ` ${colDesc.attrs}`;
             }
             columnsDef.push(colDef);
+            if (colDesc.foreignKey) {
+                let fk = colDesc.foreignKey;
+                let fkTargetColumn: string = Object.keys(fk.target.columns).find(key => fk.target.columns[key] === fk.targetColumn)!;
+                foreignKeyDefs.push(`FOREIGN KEY(${colName}) REFERENCES ${fk.target.tableName}(${fkTargetColumn})`);
+            }
         }
-        return `CREATE TABLE IF NOT EXISTS ${descriptor.getTableName()} (${columnsDef.join(', ')});`;
-    }
-
-    static gatherTableCreationScripts(): string[] {
-        let result: string[] = [];
-        result.push(DBManager.generateTableCreationScript(DBAccountFactory));
-        result.push(DBManager.generateTableCreationScript(DBSyncFolderFactory));
-        return result;
+        columnsDef.push(...foreignKeyDefs); // Add foreign key definitions to columns at the end
+        return `CREATE TABLE ${tableName} (\n\t${columnsDef.join(',\n\t')});`;
     }
 
     async initDataStore(context: Context, storageName: string) {
@@ -96,9 +103,11 @@ export class DBManager {
         try {
             let storeVersion = await transaction.execute('PRAGMA user_version');
             if (storeVersion === 0) {
-                const creationScripts = DBManager.gatherTableCreationScripts();
-                for (let sql of creationScripts) {
-                    await transaction.execute(sql);
+                for (let tableDesc of TABLES) {
+                    let createSql = DBManager.generateTableCreationScript(tableDesc.tableName, tableDesc.columns);
+                    Logger.Info(TAG, `upgradeDatabase: creating table with sql: ${createSql}`);
+                    let result = await transaction.execute(createSql);
+                    Logger.Info(TAG, `upgradeDatabase: created table ${tableDesc.tableName}, result: ${JSON.stringify(result)}`);
                 }
                 await transaction.execute('PRAGMA user_version = 1');
                 storeVersion = 1;
@@ -148,7 +157,7 @@ export class DBManager {
         Logger.Debug(TAG, 'doTransaction: completed');
     }
 
-    async getItems<T extends DBItem>(factory: DBObjectCreator<T>): Promise<T[]> {
+    async getItems<T extends DBItem>(factory: DBTableDescriptor<string, T>): Promise<T[]> {
         Logger.Info(TAG, 'getObjects: enter');
         if (!this.store) {
             Logger.Error(TAG, `getObjects: store is undefined`);
@@ -157,10 +166,10 @@ export class DBManager {
 
         let result: T[] = [];
         try {
-            let resultSet = await this.store.query(new relationalStore.RdbPredicates(factory.getTableName()));
+            let resultSet = await this.store.query(new relationalStore.RdbPredicates(factory.tableName));
             while (resultSet.goToNextRow()) {
                 let bucket = resultSet.getRow();
-                result.push(factory.createFromBucket(bucket));
+                result.push(factory.createItemFromBucket(bucket));
             }
         } catch (error) {
             Logger.Error(TAG, `getObjects: failed to read result set: ${JSON.stringify(error)}`);
@@ -179,11 +188,56 @@ export class DBManager {
 
         let bucket = object.toBucket();
         try {
-            await this.store.insert(object.getTableName(), bucket);
+            let row = await this.store.insert(object.getTableName(), bucket);
+            if (!row) {
+                Logger.Error(TAG, `storeObject: failed to insert account, no row returned`);
+                return;
+            }
         } catch (error) {
             Logger.Error(TAG, `storeObject: failed to insert account: ${JSON.stringify(error)}`);
             return;
         }
         Logger.Info(TAG, 'storeObject: completed');
+    }
+
+    async dropDatabase() {
+        if (this.store === undefined) {
+            Logger.Error(TAG, `dropAllTables: store is undefined`);
+            return;
+        }
+
+        Logger.Warn(TAG, `dropAllTables: enter, SHOULD_RECREATE_DATABASE=${CAN_RECREATE_DATABASE}, DEBUG=${DEBUG}`);
+        if (CAN_RECREATE_DATABASE && DEBUG) {
+            Logger.Warn(TAG, 'upgradeDatabase: recreating database as per ALWAYS_RECREATE_DATABASE flag');
+            try {
+                for (let tableDesc of TABLES) {
+                    let dropSql = `DROP TABLE IF EXISTS ${tableDesc.tableName};`;
+                    await this.store.execute(dropSql);
+                    Logger.Warn(TAG, `dropAllTables: dropped table ${tableDesc.tableName}`);
+                }
+                await this.store.execute('PRAGMA user_version = 0');
+                Logger.Warn(TAG, 'dropAllTables: reset user_version to 0');
+                // drop all other tables
+                let tablesResult = await this.store.querySql('SELECT name FROM sqlite_master WHERE type="table";');
+                Logger.Warn(TAG, `dropAllTables: checking for leftover tables: ${tablesResult.rowCount}`);
+                while (tablesResult.goToNextRow()) {
+                    let row = tablesResult.getRow();
+                    let tableName = row['name'] as string;
+                    Logger.Warn(TAG, `dropAllTables: leftover table ${tableName}`);
+                    if (tableName === 'sqlite_sequence') {
+                        Logger.Warn(TAG, `dropAllTables: skipping sqlite_sequence table`);
+                        continue;
+                    }
+                    await this.store.execute(`DROP TABLE IF EXISTS ${tableName};`);
+                }
+                Logger.Warn(TAG, 'dropAllTables: database dropped, closing store');
+                await this.store.close();
+            } catch (e) {
+                Logger.Error(TAG, `dropAllTables: failed to execute sql: ${JSON.stringify(e)}`);
+            }
+            Logger.Warn(TAG, 'dropAllTables: completed');
+        } else {
+            Logger.Warn(TAG, 'dropAllTables: operation is disabled');
+        }
     }
 }

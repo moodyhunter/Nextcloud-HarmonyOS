@@ -13,7 +13,7 @@ struct TransferProgressItem {
                 .width('100%')
 
             Progress({
-                value: this.transferTask.transferedSize,
+                value: this.transferTask.transferredSize,
                 total: this.transferTask.totalSize,
             })
                 .flexGrow(1)
@@ -31,8 +31,7 @@ struct TransferProgressItem {
 @Entry
 @Component
 struct StatusBarPage {
-    @State tasks: TransferTask[] = [
-    ];
+    @State tasks: TransferTask[] = [];
 
     aboutToAppear(): void {
         for (let i = 0; i < 80; i++) {
