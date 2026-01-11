@@ -1,12 +1,22 @@
-import { DirectoryEntry, ListFiles, Logger, DownloadFile, Nextcloud, Account } from 'nextcloud';
+import {
+    Account,
+    DirectoryEntry,
+    DownloadFile,
+    ListFiles,
+    Logger,
+    Nextcloud,
+    TransferManager,
+    TransferManagerImpl,
+    TransferTask
+} from 'nextcloud';
 import { common } from '@kit.AbilityKit';
 import { fileIo, fileShare, fileUri, picker } from '@kit.CoreFileKit';
 import { Constants } from '../utils/Common';
 import * as CloudSyncApi from '../utils/CloudSyncApi';
 import { PermissionManager } from '../utils/PermissionManager';
-import { TransferManager, TransferManagerImpl, TransferTask } from 'nextcloud';
 import { LengthMetrics } from '@kit.ArkUI';
 import { DownloadQueue } from '../utils/DownloadQueue';
+import { SettingsPage } from './SettingsPage';
 
 const TAG = 'PcAbility'
 const OPERATION_MODES = fileShare.OperationMode.READ_MODE | fileShare.OperationMode.WRITE_MODE;
@@ -51,6 +61,155 @@ struct PCAbility {
         CloudSyncApi.updateCustomAlias(this.path, this.alias);
     }
 
+    @Builder
+    pathOps() {
+        Column({ space: 16 }) {
+            Text(`Root Path: ${this.path}`)
+
+            TextInput({ text: this.alias!! })
+
+            Button('select path')
+                .onClick(async () => {
+                    let context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+                    let documentPicker = new picker.DocumentViewPicker(context);
+                    let items = await documentPicker.select({
+                        defaultFilePathUri: 'file://docs/storage/Users/currentUser/CloudSyncFolder',
+                        maxSelectNumber: 1,
+                        selectMode: picker.DocumentSelectMode.FOLDER,
+                    });
+                    if (items.length !== 1) {
+                        Logger.Error(TAG, `???`);
+                        return;
+                    }
+                    let path = new fileUri.FileUri(items[0]).path;
+                    this.path = path;
+
+                    try {
+                        Logger.Info(TAG, items[0]);
+                        await fileShare.persistPermission([{
+                            uri: items[0],
+                            operationMode: OPERATION_MODES
+                        }]);
+                        Logger.Info(TAG, `persist done`);
+                    } catch (e) {
+                        Logger.Error(TAG, `failed to persist permission: ${JSON.stringify(e)}`);
+                    }
+                })
+
+            Button('create root dir')
+                .onClick(async () => {
+                    let addResult: number = CloudSyncApi.add("Moody 的 Nextcloud", this.path);
+                    Logger.Info(TAG, `Add: ${addResult}`)
+                })
+
+            Button('connect')
+                .onClick(async () => {
+                    CloudSyncApi.connect(this.path);
+                })
+
+            Button('disconnect')
+                .onClick(() => {
+                    CloudSyncApi.disconnect(this.path);
+                })
+
+            Button('remove root dir')
+                .onClick(() => {
+                    CloudSyncApi.remove(this.path);
+                })
+        }
+        .width('100%')
+        .height('100%')
+        .padding(16)
+    }
+
+    @Builder
+    pcMainPage() {
+        Column({ space: 16 }) {
+            Column({ space: 8 }) {
+                List() {
+                    ForEach(this.files, (item: DirectoryEntry, index: number) => {
+                        ListItem() {
+                            Text(`${index}: ${item.name} --- ${item.isDirectory ? 'dir' : item.mime}`)
+                        }
+                        .clip(true)
+                    })
+                }
+                .width('100%')
+                .height(150)
+
+                Button('reload')
+                    .onClick(async () => {
+                        this.files = await ListFiles(this.account, '/');
+                    })
+
+                Button('sync all')
+                    .onClick(async () => {
+                        Logger.Info(TAG, `sync all`);
+                        this.downloadQueue.addRootDir(this.account);
+                        while (this.downloadQueue.hasPendingItem()) {
+                            let next = await this.downloadQueue.getNextDownloadFile();
+                            if (next === undefined) {
+                                break;
+                            }
+                            Logger.Info(TAG, next.relativePath);
+                            if (next.isDirectory) {
+                                try {
+                                    fileIo.mkdirSync(this.path + '/' + next.relativePath);
+                                } catch (e) {
+                                }
+                            } else {
+                                await DownloadFile(this.account, next.relativePath, this.path + '/' + next.relativePath);
+                            }
+                            Logger.Info(TAG, next.relativePath);
+                        }
+                        Logger.Info(TAG, `download completed`);
+                    })
+            }
+            .padding(8)
+            .width('100%')
+            .backgroundColor($r('sys.color.glass_material_outline_secondary'))
+
+            Column({ space: 8 }) {
+                Text('download progress')
+
+                List() {
+                    LazyForEach(this.transferManager.tasks, (item: TransferTask) => {
+                        ListItem() {
+                            TransferProgressItem({
+                                transferTask: item
+                            })
+                        }
+                    })
+                }
+                .width('100%')
+                .height(250)
+            }
+
+            Column({ space: 8 }) {
+                Text('Operation History:')
+                List() {
+                    ForEach(this.opHistory, (item: CloudSyncApi.FileChangeInfo, index) => {
+                        ListItem() {
+                            Row() {
+                                Text(`${index + 1}. `)
+                                Text(
+                                    `: ${item.relativePath}, Op: ${CloudSyncApi.FileChangeOperationType[item.operationType]}`
+                                )
+                            }
+                        }
+                    })
+                }
+                .width('100%')
+                .height(250)
+            }
+            .padding(8)
+            .backgroundColor($r('sys.color.glass_material_outline_secondary'))
+        }
+        .width('100%')
+        .height('100%')
+        .padding(16)
+    }
+
     async aboutToAppear(): Promise<void> {
         Logger.Info(TAG, `pcAbility aboutToAppear`);
         await PermissionManager.RequestPermission(this.getUIContext(), ["ohos.permission.FILE_ACCESS_PERSIST"])
@@ -90,152 +249,24 @@ struct PCAbility {
     }
 
     build() {
-        Row({ space: 16 }) {
-            Column({ space: 16 }) {
-                Text(`Root Path: ${this.path}`)
-
-                TextInput({ text: this.alias!! })
-
-                Button('select path')
-                    .onClick(async () => {
-                        let context = this.getUIContext().getHostContext() as common.UIAbilityContext;
-                        let documentPicker = new picker.DocumentViewPicker(context);
-                        let items = await documentPicker.select({
-                            defaultFilePathUri: 'file://docs/storage/Users/currentUser/CloudSyncFolder',
-                            maxSelectNumber: 1,
-                            selectMode: picker.DocumentSelectMode.FOLDER,
-                        });
-                        if (items.length !== 1) {
-                            Logger.Error(TAG, `???`);
-                            return;
-                        }
-                        let path = new fileUri.FileUri(items[0]).path;
-                        this.path = path;
-
-                        try {
-                            Logger.Info(TAG, items[0]);
-                            await fileShare.persistPermission([{
-                                uri: items[0],
-                                operationMode: OPERATION_MODES
-                            }]);
-                            Logger.Info(TAG, `persist done`);
-                        } catch (e) {
-                            Logger.Error(TAG, `failed to persist permission: ${JSON.stringify(e)}`);
-                        }
-                    })
-
-                Button('create root dir')
-                    .onClick(async () => {
-                        let addResult: number = CloudSyncApi.add("Moody 的 Nextcloud", this.path);
-                        Logger.Info(TAG, `Add: ${addResult}`)
-                    })
-
-                Button('connect')
-                    .onClick(async () => {
-                        CloudSyncApi.connect(this.path);
-                    })
-
-                Button('disconnect')
-                    .onClick(() => {
-                        CloudSyncApi.disconnect(this.path);
-                    })
-
-                Button('remove root dir')
-                    .onClick(() => {
-                        CloudSyncApi.remove(this.path);
-                    })
+        Tabs({ barPosition: BarPosition.Start }) {
+            TabContent() {
+                this.pcMainPage()
             }
-            .padding(8)
-            .width(300)
-            .backgroundColor($r('sys.color.glass_material_outline_secondary'))
+            .tabBar($r('app.string.tab_files'))
 
-            Column({ space: 16 }) {
-                Column({ space: 8 }) {
-                    List() {
-                        ForEach(this.files, (item: DirectoryEntry, index: number) => {
-                            ListItem() {
-                                Text(`${index}: ${item.name} --- ${item.isDirectory ? 'dir' : item.mime}`)
-                            }
-                            .clip(true)
-                        })
-                    }
-                    .width('100%')
-                    .height(150)
-
-                    Button('reload')
-                        .onClick(async () => {
-                            this.files = await ListFiles(this.account, '/');
-                        })
-
-                    Button('sync all')
-                        .onClick(async () => {
-                            Logger.Info(TAG, `sync all`);
-                            this.downloadQueue.addRootDir(this.account);
-                            while (this.downloadQueue.hasPendingItem()) {
-                                let next = await this.downloadQueue.getNextDownloadFile();
-                                if (next === undefined) {
-                                    break;
-                                }
-                                Logger.Info(TAG, next.relativePath);
-                                if (next.isDirectory) {
-                                    try {
-                                        fileIo.mkdirSync(this.path + '/' + next.relativePath);
-                                    } catch (e) {
-                                    }
-                                } else {
-                                    await DownloadFile(this.account, next.relativePath, this.path + '/' + next.relativePath);
-                                }
-                                Logger.Info(TAG, next.relativePath);
-                            }
-                            Logger.Info(TAG, `download completed`);
-                        })
-                }
-                .padding(8)
-                .width('100%')
-                .backgroundColor($r('sys.color.glass_material_outline_secondary'))
-
-                Column({ space: 8 }) {
-                    Text('download progress')
-
-                    List() {
-                        LazyForEach(this.transferManager.tasks, (item: TransferTask) => {
-                            ListItem() {
-                                TransferProgressItem({
-                                    transferTask: item
-                                })
-                            }
-                        })
-                    }
-                    .width('100%')
-                    .height(250)
-                }
-
-                Column({ space: 8 }) {
-                    Text('Operation History:')
-                    List() {
-                        ForEach(this.opHistory, (item: CloudSyncApi.FileChangeInfo, index) => {
-                            ListItem() {
-                                Row() {
-                                    Text(`${index + 1}. `)
-                                    Text(
-                                        `: ${item.relativePath}, Op: ${CloudSyncApi.FileChangeOperationType[item.operationType]}`
-                                    )
-                                }
-                            }
-                        })
-                    }
-                    .width('100%')
-                    .height(250)
-                }
-                .padding(8)
-                .backgroundColor($r('sys.color.glass_material_outline_secondary'))
+            TabContent() {
+                this.pathOps()
             }
-            .width(600)
-            .padding(8)
-            .border({ color: Color.Blue, width: 2 })
+            .tabBar('Paths')
+
+            TabContent() {
+                SettingsPage({ currentAccount: this.account })
+                    .width('100%')
+                    .height('100%')
+            }
+            .tabBar($r('app.string.tab_settings'))
         }
-        .width('100%')
-        .height('100%')
-        .margin(16)
+        .vertical(true)
     }
 }

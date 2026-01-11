@@ -155,7 +155,7 @@ export struct SettingsPage {
                 .margin({ top: 16, bottom: 16 })
 
             Button('DROP DATABASE')
-                .buttonStyle(ButtonStyleMode.EMPHASIZED)
+                .backgroundColor(Color.Red)
                 .onClick(async () => {
                     await Nextcloud.recreateDatabase();
                     try {

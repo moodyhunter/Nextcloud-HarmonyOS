@@ -34,6 +34,10 @@ class NextcloudImpl {
         return this.syncFolderManager.hasAccounts();
     }
 
+    public async addAccount(account: Account): Promise<void> {
+        await this.syncFolderManager.addAccount(account);
+    }
+
     public getAccountById(accountId: number): Account {
         return this.syncFolderManager.getAccountById(accountId);
     }

@@ -36,6 +36,15 @@ export class SyncFolderManager {
         return account;
     }
 
+    public getAllAccounts(): Account[] {
+        let values = this.accounts.values();
+        return Array.from(values);
+    }
+
+    public async addAccount(account: Account): Promise<void> {
+        await this.dbManager.storeItem(account.dbAccount);
+    }
+
     private async loadSyncFolders() {
         let dbFolders = await this.dbManager.getItems(DBLocalSyncFolderTable);
         for (let dbFolder of dbFolders) {

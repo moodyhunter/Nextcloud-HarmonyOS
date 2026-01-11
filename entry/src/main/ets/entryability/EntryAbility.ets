@@ -1,6 +1,6 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { AsyncSleep, InitialiseNextcloud, Logger, NCommon } from 'nextcloud';
+import { AsyncSleep, InitialiseNextcloud, Logger } from 'nextcloud';
 import { Constants, FolderViewMode } from '../utils/Common';
 import { GlobalStorage } from '../utils/GlobalStorage';
 import { Notification } from '../utils/NotificationManager';
@@ -28,12 +28,6 @@ export default class EntryAbility extends UIAbility {
         Logger.Info(TAG, 'Ability onDestroy');
     }
 
-    convertToPixelMap(res: Resource) {
-        const resManager = this.context.resourceManager;
-        const drawableDesc = resManager?.getDrawableDescriptor(res.id);
-        return drawableDesc?.getPixelMap();
-    }
-
     async onWindowStageCreate(windowStage: window.WindowStage) {
         while (!this.initCompleted) {
             Logger.Info(TAG, 'Waiting for initialization to complete...');
@@ -55,48 +49,7 @@ export default class EntryAbility extends UIAbility {
             if (isPc) {
                 PersistentStorage.persistProp(Constants.PC_CLOUD_DISK_PATH, '');
                 PersistentStorage.persistProp(Constants.PC_CLOUD_DISK_ALIAS, '');
-
-                // 构建右键菜单项内容
-                let subMenus: Array<statusBarManager.StatusBarSubMenuItem> = [];
-                let subMenuItemAction: statusBarManager.StatusBarMenuAction = {
-                    abilityName: "EntryAbility"
-                }
-                let subMenu: statusBarManager.StatusBarSubMenuItem = {
-                    subTitle: "子菜单项",
-                    menuAction: subMenuItemAction
-                }
-                subMenus.push(subMenu);
-
-                let statusBarMenuItems: Array<statusBarManager.StatusBarMenuItem> = [];
-                let menuItem: statusBarManager.StatusBarMenuItem = {
-                    title: "一级菜单项",
-                    // 一级menuAction和subMenu两项不可都缺省
-                    subMenu: subMenus
-                };
-                statusBarMenuItems.push(menuItem);
-
-                let statusBarGroupMenus: Array<statusBarManager.StatusBarGroupMenu> = [];
-                statusBarGroupMenus.push(statusBarMenuItems);
-
-                let img = this.convertToPixelMap($r('app.media.tray_icon'));
-
-                try {
-                    statusBarManager.addToStatusBar(this.context, {
-                        icons: {
-                            black: img,
-                            white: img,
-                        },
-                        quickOperation: {
-                            title: this.context.resourceManager.getStringSync($r('app.string.app_name').id),
-                            height: 400,
-                            abilityName: 'StatusBarAbility',
-                        },
-                        statusBarGroupMenu: statusBarGroupMenus,
-                    });
-                } catch (e) {
-                    Logger.Error(TAG, `failed to add to status bar: ${JSON.stringify(e)}`);
-                }
-
+                this.createTrayIcon();
             } else {
                 PersistentStorage.persistProp(Constants.VIEW_MODE_KEY, FolderViewMode.TwoColumns);
                 PersistentStorage.persistProp(Constants.PHONE_ACTIVE_ACCOUNT_ID, 0);
@@ -129,5 +82,43 @@ export default class EntryAbility extends UIAbility {
 
     async onMemoryLevel(level: AbilityConstant.MemoryLevel) {
         Logger.Info(TAG, `onMemoryLevel: level = ${AbilityConstant.MemoryLevel[level]}`);
+    }
+
+    onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+        Logger.Info(TAG, `want: ${JSON.stringify(want)}, ${JSON.stringify(launchParam)}`);
+    }
+
+    private convertToPixelMap(res: Resource) {
+        const resManager = this.context.resourceManager;
+        const drawableDesc = resManager?.getDrawableDescriptor(res.id);
+        return drawableDesc?.getPixelMap();
+    }
+
+    private createTrayIcon() {
+        let menuItem: statusBarManager.StatusBarMenuItem = {
+            title: "Main Window",
+            menuAction: {
+                abilityName: "EntryAbility",
+            }
+        };
+
+        let trayIconImage = this.convertToPixelMap($r('app.media.tray_icon'));
+
+        try {
+            statusBarManager.addToStatusBar(this.context, {
+                icons: {
+                    black: trayIconImage,
+                    white: trayIconImage,
+                },
+                quickOperation: {
+                    title: this.context.resourceManager.getStringSync($r('app.string.app_name').id),
+                    height: 400,
+                    abilityName: 'StatusBarAbility',
+                },
+                statusBarGroupMenu: [[menuItem]],
+            });
+        } catch (e) {
+            Logger.Error(TAG, `failed to add to status bar: ${JSON.stringify(e)}`);
+        }
     }
 }

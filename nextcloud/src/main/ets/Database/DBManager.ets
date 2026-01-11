@@ -42,7 +42,7 @@ const TABLES: DBTableDescriptor<string, DBItem>[] = [
 ];
 
 export class DBManager {
-    store: relationalStore.RdbStore | undefined = undefined;
+    private store: relationalStore.RdbStore | undefined = undefined;
 
     static generateTableCreationScript(tableName: string, columnDesc: Record<string, ColumnDescriptor>): string {
         let foreignKeyDefs: string[] = [];

@@ -113,7 +113,6 @@ struct Index {
                     .justifyContent(FlexAlign.Center)
                     .height(60)
                     .margin({ top: 10, bottom: 10 })
-
                 }
             }
             .tabBar($r("app.string.tab_files"))

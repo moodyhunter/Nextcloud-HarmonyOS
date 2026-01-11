@@ -1,4 +1,4 @@
-import { Logger, LoginFlow } from 'nextcloud';
+import { Logger, LoginFlow, Nextcloud } from 'nextcloud';
 import { LengthMetrics } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
 import { ShowAlertDialog, ShowToast } from '../utils/Utils';
@@ -27,6 +27,7 @@ export struct LoginPage {
         let loginResult = await this.loginFlow.loginPollRepeatedly();
         switch (loginResult.kind) {
             case 'ok': {
+                await Nextcloud.addAccount(loginResult.account);
                 ShowAlertDialog(this.getUIContext(), "Login Successful", `Welcome, ${loginResult.account.username}!`);
                 this.closeDialog();
                 break;
