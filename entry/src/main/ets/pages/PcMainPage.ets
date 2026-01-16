@@ -5,13 +5,14 @@ import {
     ListFiles,
     Logger,
     Nextcloud,
+    SyncConfiguration,
+    SyncFolderManager,
     TransferManager,
     TransferManagerImpl,
-    TransferTask
+    TransferTask,
 } from 'nextcloud';
 import { common } from '@kit.AbilityKit';
 import { fileIo, fileShare, fileUri, picker } from '@kit.CoreFileKit';
-import { Constants } from '../utils/Common';
 import * as CloudSyncApi from '../utils/CloudSyncApi';
 import { PermissionManager } from '../utils/PermissionManager';
 import { LengthMetrics } from '@kit.ArkUI';
@@ -21,9 +22,9 @@ import { SettingsPage } from './SettingsPage';
 const TAG = 'PcAbility'
 const OPERATION_MODES = fileShare.OperationMode.READ_MODE | fileShare.OperationMode.WRITE_MODE;
 
-@Component
+@ComponentV2
 struct TransferProgressItem {
-    @ObjectLink transferTask: TransferTask;
+    @Require @Param transferTask: TransferTask;
 
     build() {
         Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, space: { main: LengthMetrics.vp(8) } }) {
@@ -43,79 +44,105 @@ struct TransferProgressItem {
     }
 }
 
-
-@Entry
-@Component
-struct PCAbility {
-    @StorageLink(Constants.PC_CLOUD_DISK_PATH) private path: string = '';
-    @StorageLink(Constants.PC_CLOUD_DISK_ALIAS) @Watch('onAliasChanged') private alias: string = 'Moody 的 Nextcloud';
-    @State private opHistory: CloudSyncApi.FileChangeInfo[] = [];
-    @State private files: DirectoryEntry[] = [];
-    @StorageLink(Constants.PHONE_ACTIVE_ACCOUNT_ID) private readonly activeAccountId: number = 0;
-    @State private readonly account: Account = Nextcloud.getAccountById(this.activeAccountId);
-    @State private transferManager: TransferManagerImpl = TransferManager;
+@ComponentV2
+struct SyncConfigurationRow {
+    @Require @Param readonly syncFolderManager: SyncFolderManager;
+    @Require @Param readonly configuration: SyncConfiguration;
+    @Require @Param readonly account: Account;
     private downloadQueue: DownloadQueue = new DownloadQueue();
-    private pendingMoveTo: Map<string, string> = new Map();
 
-    onAliasChanged(): void {
-        CloudSyncApi.updateCustomAlias(this.path, this.alias);
-    }
+    build() {
+        Row({ space: 8 }) {
+            Text(`${this.configuration.id} : ${this.configuration.localFolder.localPath} <=> ${this.configuration.remoteFolder.remotePath}`)
 
-    @Builder
-    pathOps() {
-        Column({ space: 16 }) {
-            Text(`Root Path: ${this.path}`)
-
-            TextInput({ text: this.alias!! })
-
-            Button('select path')
-                .onClick(async () => {
-                    let context = this.getUIContext().getHostContext() as common.UIAbilityContext;
-                    let documentPicker = new picker.DocumentViewPicker(context);
-                    let items = await documentPicker.select({
-                        defaultFilePathUri: 'file://docs/storage/Users/currentUser/CloudSyncFolder',
-                        maxSelectNumber: 1,
-                        selectMode: picker.DocumentSelectMode.FOLDER,
-                    });
-                    if (items.length !== 1) {
-                        Logger.Error(TAG, `???`);
-                        return;
-                    }
-                    let path = new fileUri.FileUri(items[0]).path;
-                    this.path = path;
-
-                    try {
-                        Logger.Info(TAG, items[0]);
-                        await fileShare.persistPermission([{
-                            uri: items[0],
-                            operationMode: OPERATION_MODES
-                        }]);
-                        Logger.Info(TAG, `persist done`);
-                    } catch (e) {
-                        Logger.Error(TAG, `failed to persist permission: ${JSON.stringify(e)}`);
-                    }
-                })
-
-            Button('create root dir')
-                .onClick(async () => {
-                    let addResult: number = CloudSyncApi.add("Moody 的 Nextcloud", this.path);
-                    Logger.Info(TAG, `Add: ${addResult}`)
-                })
+            Blank()
+                .flexGrow(1)
 
             Button('connect')
                 .onClick(async () => {
-                    CloudSyncApi.connect(this.path);
+                    CloudSyncApi.connect(this.configuration.localFolder.localPath);
                 })
 
             Button('disconnect')
                 .onClick(() => {
-                    CloudSyncApi.disconnect(this.path);
+                    CloudSyncApi.disconnect(this.configuration.localFolder.localPath);
                 })
 
-            Button('remove root dir')
-                .onClick(() => {
-                    CloudSyncApi.remove(this.path);
+            Button('sync all')
+                .onClick(() => this.doDownloadAll())
+
+            Button('DELETE')
+                .onClick(async () => {
+                    CloudSyncApi.disconnect(this.configuration.localFolder.localPath);
+                    CloudSyncApi.remove(this.configuration.localFolder.localPath);
+                    await this.syncFolderManager.removeSyncConfiguration(this.configuration);
                 })
+        }
+        .width('100%')
+        .height(50)
+        .padding({ left: 8, right: 8 })
+        .border({ width: 1, color: Color.Green })
+    }
+
+    private async doDownloadAll() {
+        Logger.Info(TAG, `sync all`);
+        this.downloadQueue.addRootDir(this.account);
+        while (this.downloadQueue.hasPendingItem()) {
+            let next = await this.downloadQueue.getNextDownloadFile();
+            if (next === undefined) {
+                break;
+            }
+            Logger.Info(TAG, next.relativePath);
+            if (next.isDirectory) {
+                try {
+                    fileIo.mkdirSync(this.configuration.localFolder.localPath + '/' + next.relativePath);
+                } catch (e) {
+                }
+            } else {
+                await DownloadFile(this.account, next.relativePath, this.configuration.localFolder.localPath + '/' + next.relativePath);
+            }
+            Logger.Info(TAG, next.relativePath);
+        }
+        Logger.Info(TAG, `download completed`);
+    }
+}
+
+@Entry
+@ComponentV2
+struct PCAbility {
+    @Local private readonly activeAccountId: number = 0; // TODO: get from PersistentStorage
+    @Local private readonly account: Account = Nextcloud.getAccountById(this.activeAccountId);
+    @Local private opHistory: CloudSyncApi.FileChangeInfo[] = [];
+    @Local private files: DirectoryEntry[] = [];
+    @Local private syncFolderManager: SyncFolderManager = Nextcloud.getSyncFolderManager();
+    @Local private transferManager: TransferManagerImpl = TransferManager;
+    private pendingMoveTo: Map<string, string> = new Map();
+
+    @Builder
+    pathOps() {
+        Column() {
+            List({ space: 4 }) {
+                ListItem() {
+                    Button('+')
+                        .onClick(async () => {
+                            await this.doAddNewSyncConfiguration();
+                        })
+                        .width('100%')
+                }
+
+                ForEach(Array.from(this.syncFolderManager.allSyncConfigurations), (conf: [number, SyncConfiguration], index: number) => {
+                    ListItem() {
+                        SyncConfigurationRow({
+                            account: this.account,
+                            syncFolderManager: this.syncFolderManager,
+                            configuration: conf[1],
+                        })
+                    }
+                    .clip(true)
+                })
+            }
+            .width('100%')
+            .height('100%')
         }
         .width('100%')
         .height('100%')
@@ -142,28 +169,6 @@ struct PCAbility {
                         this.files = await ListFiles(this.account, '/');
                     })
 
-                Button('sync all')
-                    .onClick(async () => {
-                        Logger.Info(TAG, `sync all`);
-                        this.downloadQueue.addRootDir(this.account);
-                        while (this.downloadQueue.hasPendingItem()) {
-                            let next = await this.downloadQueue.getNextDownloadFile();
-                            if (next === undefined) {
-                                break;
-                            }
-                            Logger.Info(TAG, next.relativePath);
-                            if (next.isDirectory) {
-                                try {
-                                    fileIo.mkdirSync(this.path + '/' + next.relativePath);
-                                } catch (e) {
-                                }
-                            } else {
-                                await DownloadFile(this.account, next.relativePath, this.path + '/' + next.relativePath);
-                            }
-                            Logger.Info(TAG, next.relativePath);
-                        }
-                        Logger.Info(TAG, `download completed`);
-                    })
             }
             .padding(8)
             .width('100%')
@@ -213,52 +218,45 @@ struct PCAbility {
     async aboutToAppear(): Promise<void> {
         Logger.Info(TAG, `pcAbility aboutToAppear`);
         await PermissionManager.RequestPermission(this.getUIContext(), ["ohos.permission.FILE_ACCESS_PERSIST"])
-        if (this.path) {
-            CloudSyncApi.connect(this.path);
-        }
-        CloudSyncApi.registerFileChangeMonitor((info: CloudSyncApi.FileChangeInfo) => {
-            if (info.operationType === CloudSyncApi.FileChangeOperationType.MOVE_FROM) {
-                this.pendingMoveTo.set(info.fileId, info.relativePath);
-            } else if (info.operationType === CloudSyncApi.FileChangeOperationType.MOVE_TO) {
-                let moveFrom = this.pendingMoveTo.get(info.fileId);
-                if (moveFrom === undefined) {
-                    Logger.Error(TAG, `got a MoveTo without a MoveFrom`);
-                } else {
-                    Logger.Info(TAG, `move: ${moveFrom} -> ${info.relativePath}`);
-                    this.pendingMoveTo.delete(info.fileId);
-                }
+        for (let syncConfiguration of this.syncFolderManager.allSyncConfigurations.values()) {
+            Logger.Info(TAG, `configuration: ${syncConfiguration.id} --- ${syncConfiguration.localFolder.localPath} <=> ${syncConfiguration.remoteFolder.remotePath}`);
+            CloudSyncApi.connect(syncConfiguration.localFolder.localPath);
+
+            try {
+                await fileShare.activatePermission([{
+                    uri: fileUri.getUriFromPath(syncConfiguration.localFolder.localPath),
+                    operationMode: OPERATION_MODES
+                }]);
+                Logger.Info(TAG, `activate permission done for '${syncConfiguration.localFolder.localPath}'`);
+            } catch (e) {
+                Logger.Error(TAG, `failed to activate: ${JSON.stringify(e)}`);
             }
-            Logger.Info(TAG, `${CloudSyncApi.FileChangeOperationType[info.operationType]} ::: '${info.relativePath}'`);
-            this.opHistory = [info, ...this.opHistory];
+        }
+
+        CloudSyncApi.registerFileChangeMonitor((info: CloudSyncApi.FileChangeInfo) => {
+            this.onFileChanged(info)
         });
 
-        try {
-            await fileShare.activatePermission([{
-                uri: fileUri.getUriFromPath(this.path),
-                operationMode: OPERATION_MODES
-            }]);
-            Logger.Info(TAG, `activate permission done`);
-        } catch (e) {
-            Logger.Error(TAG, `failed to activate: ${JSON.stringify(e)}`);
-        }
         this.files = await ListFiles(this.account, '/');
     }
 
     aboutToDisappear(): void {
-        CloudSyncApi.disconnect(this.path);
+        for (let syncConfiguration of this.syncFolderManager.allSyncConfigurations.values()) {
+            CloudSyncApi.disconnect(syncConfiguration.localFolder.localPath);
+        }
     }
 
     build() {
         Tabs({ barPosition: BarPosition.Start }) {
             TabContent() {
-                this.pcMainPage()
-            }
-            .tabBar($r('app.string.tab_files'))
-
-            TabContent() {
                 this.pathOps()
             }
             .tabBar('Paths')
+
+            TabContent() {
+                this.pcMainPage()
+            }
+            .tabBar($r('app.string.tab_files'))
 
             TabContent() {
                 SettingsPage({ currentAccount: this.account })
@@ -268,5 +266,57 @@ struct PCAbility {
             .tabBar($r('app.string.tab_settings'))
         }
         .vertical(true)
+    }
+
+    private async doAddNewSyncConfiguration() {
+        let context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+        let documentPicker = new picker.DocumentViewPicker(context);
+        let items = await documentPicker.select({
+            defaultFilePathUri: 'file://docs/storage/Users/currentUser/CloudSyncFolder',
+            maxSelectNumber: 1,
+            selectMode: picker.DocumentSelectMode.FOLDER,
+        });
+        if (items.length !== 1) {
+            Logger.Error(TAG, `???`);
+            return;
+        }
+        let path = new fileUri.FileUri(items[0]).path;
+
+        try {
+            Logger.Info(TAG, items[0]);
+            await fileShare.persistPermission([{
+                uri: items[0],
+                operationMode: OPERATION_MODES
+            }]);
+            Logger.Info(TAG, `persist done`);
+        } catch (e) {
+            Logger.Error(TAG, `failed to persist permission: ${JSON.stringify(e)}`);
+        }
+
+        let localPathAlias = 'LocalPathAlias_' + Date.now();
+        let localFolder = await this.syncFolderManager.addLocalFolder(path, localPathAlias);
+        Logger.Info(TAG, `added local folder: ${JSON.stringify(localFolder)}`);
+        let remoteFolder = await this.syncFolderManager.addRemoteFolder(this.account, '/', 'RemotePathAlias_' + Date.now());
+        Logger.Info(TAG, `added remote folder: ${JSON.stringify(remoteFolder)}`);
+        let syncConfig = await this.syncFolderManager.addSyncConfiguration(localFolder, remoteFolder);
+        Logger.Info(TAG, `added sync configuration: ${JSON.stringify(syncConfig)}`);
+        let addResult: number = CloudSyncApi.add(localPathAlias, path);
+        Logger.Info(TAG, `Add: ${addResult}`)
+    }
+
+    private async onFileChanged(info: CloudSyncApi.FileChangeInfo): Promise<void> {
+        if (info.operationType === CloudSyncApi.FileChangeOperationType.MOVE_FROM) {
+            this.pendingMoveTo.set(info.fileId, info.relativePath);
+        } else if (info.operationType === CloudSyncApi.FileChangeOperationType.MOVE_TO) {
+            let moveFrom = this.pendingMoveTo.get(info.fileId);
+            if (moveFrom === undefined) {
+                Logger.Error(TAG, `got a MoveTo without a MoveFrom`);
+            } else {
+                Logger.Info(TAG, `move: ${moveFrom} -> ${info.relativePath}`);
+                this.pendingMoveTo.delete(info.fileId);
+            }
+        }
+        Logger.Info(TAG, `${CloudSyncApi.FileChangeOperationType[info.operationType]} ::: '${info.relativePath}'`);
+        this.opHistory = [info, ...this.opHistory];
     }
 }

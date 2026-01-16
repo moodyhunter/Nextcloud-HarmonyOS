@@ -24,9 +24,11 @@ export class DBRemoteFolder implements DBItem {
         return DBRemoteFolder.DB_TABLE_NAME;
     }
 
-    public toBucket(): relationalStore.ValuesBucket {
+    public toBucket(isCreate: boolean): relationalStore.ValuesBucket {
         let bucket: relationalStore.ValuesBucket = {};
-        bucket['folder_id'] = this.id;
+        if (isCreate === false) {
+            bucket['folder_id'] = this.id;
+        }
         bucket['account_id'] = this.accountId;
         bucket['remote_path'] = this.remotePath;
         bucket['alias'] = this.alias;
@@ -34,14 +36,13 @@ export class DBRemoteFolder implements DBItem {
     }
 }
 
-type DBRemoteFolderColumnNames = 'folder_id' | 'remote_path' | 'alias' | 'account_id';
+type DBRemoteFolderColumnNames = 'folder_id' | 'remote_path' | 'account_id' | 'alias';
 
 export const DBRemoteFolderTable: DBTableDescriptor<DBRemoteFolderColumnNames, DBRemoteFolder> = {
     tableName: DBRemoteFolder.DB_TABLE_NAME,
     columns: {
         'folder_id': { type: 'INTEGER', attrs: 'PRIMARY KEY AUTOINCREMENT', },
         'remote_path': { type: 'TEXT', attrs: 'NOT NULL' },
-        'alias': { type: 'TEXT', attrs: 'NOT NULL' },
         'account_id': {
             type: 'INTEGER',
             attrs: 'NOT NULL',
@@ -50,12 +51,13 @@ export const DBRemoteFolderTable: DBTableDescriptor<DBRemoteFolderColumnNames, D
                 targetColumn: DBAccountTableInfo.columns.account_id,
             },
         },
+        'alias': { type: 'TEXT', attrs: 'NOT NULL' },
     },
     createItemFromBucket(bucket: relationalStore.ValuesBucket): DBRemoteFolder {
         let id = bucket['folder_id'] as number;
         let remotePath = bucket['remote_path'] as string;
-        let alias = bucket['alias'] as string;
         let account_id = bucket['account_id'] as number;
+        let alias = bucket['alias'] as string;
         return new DBRemoteFolder(id, account_id, remotePath, alias);
     }
 };

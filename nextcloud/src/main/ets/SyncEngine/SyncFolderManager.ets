@@ -1,85 +1,124 @@
 // Manage mappings between Account -=> SyncFolder
 import { Logger } from '../Utils/Logger';
 import { DBManager } from '../Database/DBManager';
+import { DBSyncConfiguration, DBSyncConfigurationTable } from '../Database/DbTypes/DBSyncConfiguration';
+import { LocalFolder } from '../Database/Types/LocalFolder';
+import { RemoteFolder } from '../Database/Types/RemoteFolder';
+import { DBLocalSyncFolder, DBLocalSyncFolderTable } from '../Database/DbTypes/DBLocalFolder';
+import { DBRemoteFolder, DBRemoteFolderTable } from '../Database/DbTypes/DBRemoteFolder';
 import { Account } from '../Account/Account';
-import { DBAccount, DBAccountTableInfo as DBAccountTable } from '../Database/Types/DBAccount';
-import { NCommon } from '../Common';
-import { SyncFolder } from './SyncFolder';
-import { DBLocalSyncFolderTableInfo as DBLocalSyncFolderTable } from '../Database/Types/DBLocalSyncFolder';
+import { SyncConfiguration } from '../Database/Types/SyncConfiguration';
 
 const TAG = 'SyncEngine/SyncFolderManager';
 
+@ObservedV2
 export class SyncFolderManager {
-    private dbManager: DBManager;
-    private accounts: Map<number, Account> = new Map();
-    private folders: Map<number, SyncFolder> = new Map();
+    @Trace private configurations_: Map<number, SyncConfiguration> = new Map();
+    @Trace private localFolders_: Map<number, LocalFolder> = new Map();
+    @Trace private remoteFolders_: Map<number, RemoteFolder> = new Map();
+    private dbManager_: DBManager;
 
     constructor(dbManager: DBManager) {
         Logger.Info(TAG, `constructor`);
-        this.dbManager = dbManager;
+        this.dbManager_ = dbManager;
     }
 
-    public async loadData(): Promise<void> {
-        await this.loadAccounts();
-        await this.loadSyncFolders();
+    public get allSyncConfigurations(): Map<number, SyncConfiguration> {
+        return this.configurations_;
     }
 
-    public hasAccounts(): boolean {
-        return this.accounts.size > 0;
+    public async startWatchForChanges(): Promise<void> {
+        Logger.Info(TAG, `startWatchForChanges: enter`);
     }
 
-    public getAccountById(accountId: number): Account {
-        let account = this.accounts.get(accountId);
-        if (!account) {
-            throw new Error(`getAccountById: account id ${accountId} not found`);
-        }
-        return account;
+    public async addLocalFolder(localPath: string, alias: string): Promise<LocalFolder> {
+        Logger.Info(TAG, `addLocalFolder: enter`);
+        let dbLocalFolder = new DBLocalSyncFolder(0, localPath, alias);
+        let localFolder = new LocalFolder(dbLocalFolder);
+        let insertedId = await this.dbManager_.createItem(dbLocalFolder);
+        dbLocalFolder.id = insertedId!;
+        this.localFolders_.set(dbLocalFolder.id, localFolder);
+        Logger.Info(TAG, `addLocalFolder: added local folder id ${dbLocalFolder.id} with path ${localPath}`);
+        return localFolder;
     }
 
-    public getAllAccounts(): Account[] {
-        let values = this.accounts.values();
-        return Array.from(values);
+    public async addRemoteFolder(account: Account, remotePath: string, alias: string): Promise<RemoteFolder> {
+        Logger.Info(TAG, `addRemoteFolder: enter`);
+        let dbRemoteFolder = new DBRemoteFolder(0, account.id, remotePath, alias);
+        let remoteFolder = new RemoteFolder(dbRemoteFolder);
+        let insertedId = await this.dbManager_.createItem(dbRemoteFolder);
+        dbRemoteFolder.id = insertedId!;
+        this.remoteFolders_.set(dbRemoteFolder.id, remoteFolder);
+        Logger.Info(TAG, `addRemoteFolder: added remote folder id ${dbRemoteFolder.id} with path ${remotePath}`);
+        return remoteFolder;
     }
 
-    public async addAccount(account: Account): Promise<void> {
-        await this.dbManager.storeItem(account.dbAccount);
+    public async addSyncConfiguration(localFolder: LocalFolder, remoteFolder: RemoteFolder): Promise<SyncConfiguration> {
+        Logger.Info(TAG, `addSyncConfiguration: enter`);
+        let dbSyncConfiguration = new DBSyncConfiguration(0, localFolder.id, remoteFolder.id);
+        let insertedId = await this.dbManager_.createItem(dbSyncConfiguration);
+        dbSyncConfiguration.id = insertedId!;
+        const syncConfig = new SyncConfiguration(localFolder, remoteFolder, dbSyncConfiguration);
+        this.configurations_.set(dbSyncConfiguration.id, syncConfig);
+        Logger.Info(TAG, `${JSON.stringify(this.configurations_.get(dbSyncConfiguration.id))}`);
+        Logger.Info(TAG, `addSyncConfiguration: added configuration id ${insertedId} with local folder id ${localFolder.id} and remote folder id ${remoteFolder.id}`);
+        return syncConfig;
     }
 
-    private async loadSyncFolders() {
-        let dbFolders = await this.dbManager.getItems(DBLocalSyncFolderTable);
-        for (let dbFolder of dbFolders) {
-            let ownerAccount = this.accounts.get(dbFolder.accountId);
-            if (!ownerAccount) {
-                Logger.Error(TAG, `loadSyncFolders: no owner account found for folder id ${dbFolder.id}, account id ${dbFolder.accountId}`);
+    public async removeSyncConfiguration(syncConfiguration: SyncConfiguration): Promise<void> {
+        Logger.Info(TAG, `removeSyncConfiguration: enter for configuration id ${syncConfiguration.id}`);
+        await this.dbManager_.deleteItemById(syncConfiguration.id, syncConfiguration.dbSyncConfiguration);
+        this.configurations_.delete(syncConfiguration.id);
+        Logger.Info(TAG, `removeSyncConfiguration: removed configuration id ${syncConfiguration.id}`);
+    }
+
+    public async loadSyncFolders(): Promise<void> {
+        Logger.Info(TAG, `loadSyncFolders: enter`);
+        let dbSyncConfiguration = await this.dbManager_.getItems(DBSyncConfigurationTable);
+        for (let conf of dbSyncConfiguration) {
+            const localFolder = await this.getLocalFolderById(conf.localFolderId);
+            const remoteFolder = await this.getRemoteFolderById(conf.remoteFolderId);
+            if (!localFolder || !remoteFolder) {
+                Logger.Error(TAG, `loadSyncFolders: failed to load sync configuration id ${conf.id} due to missing local or remote folder`);
                 continue;
             }
-            let syncFolder = new SyncFolder(dbFolder, ownerAccount);
-            this.folders.set(dbFolder.id, syncFolder);
+
+            const syncConfig = new SyncConfiguration(localFolder, remoteFolder, conf);
+            this.configurations_.set(conf.id, syncConfig);
+            Logger.Info(TAG, `loadSyncFolders: loaded sync configuration id ${conf.id} with local folder id ${localFolder.id} and remote folder id ${remoteFolder.id}`);
         }
+        Logger.Info(TAG, `loadSyncFolders: loaded total ${this.configurations_.size} sync configurations`);
     }
 
-    private async loadAccounts(): Promise<void> {
-        let dbAccounts = await this.dbManager.getItems(DBAccountTable);
-        for (let dbAccount of dbAccounts) {
-            let account = new Account(dbAccount);
-            this.accounts.set(dbAccount.id, account);
+    private async getLocalFolderById(id: number): Promise<LocalFolder | null> {
+        let existing = this.localFolders_.get(id);
+        if (existing) {
+            return existing;
         }
 
-        if (dbAccounts.length === 0) {
-            // No accounts found in database, migrate from preferences if possible
-            let prefServer = NCommon.Preference.getPref('login.server', '');
-            let prefUsername = NCommon.Preference.getPref('login.username', '');
-            let prefPassword = NCommon.Preference.getPref('login.appPassword', '');
-            if (prefPassword.length > 0) {
-                Logger.Info(TAG, `loadAccounts: no accounts found, migrate default account '${prefUsername}@${prefServer}' from preferences`);
-                let dbAccount = new DBAccount(0, prefServer, prefUsername, prefPassword);
-                this.accounts.set(dbAccount.id, new Account(dbAccount));
-                await this.dbManager.storeItem(dbAccount);
-            } else {
-                Logger.Info(TAG, `loadAccounts: no accounts found, possibly first run`);
-            }
-        } else {
-            Logger.Info(TAG, `loadAccounts: ${dbAccounts.length} accounts loaded`);
+        let dbLocalFolder = await this.dbManager_.getItemById(id, DBLocalSyncFolderTable.columns.folder_id, DBLocalSyncFolderTable);
+        if (!dbLocalFolder) {
+            Logger.Error(TAG, `getLocalFolderById: local folder id ${id} not found`);
+            return null;
         }
+        existing = new LocalFolder(dbLocalFolder);
+        this.localFolders_.set(id, existing);
+        return existing;
+    }
+
+    private async getRemoteFolderById(id: number): Promise<RemoteFolder | null> {
+        let existing = this.remoteFolders_.get(id);
+        if (existing) {
+            return existing;
+        }
+
+        let dbRemoteFolder = await this.dbManager_.getItemById(id, DBRemoteFolderTable.columns.folder_id, DBRemoteFolderTable);
+        if (!dbRemoteFolder) {
+            Logger.Error(TAG, `getRemoteFolderById: remote folder id ${id} not found`);
+            return null;
+        }
+        existing = new RemoteFolder(dbRemoteFolder);
+        this.remoteFolders_.set(id, existing);
+        return existing;
     }
 }

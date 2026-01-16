@@ -1,15 +1,19 @@
-import { DBAccount } from '../Database/Types/DBAccount';
+import { DBAccount } from '../Database/DbTypes/DBAccount';
 import { Base64Encode } from '../Utils/CommonUtils';
 import { Logger } from '../Utils/Logger';
 
 const TAG = 'Account/Account';
 
 export class Account {
-    dbAccount: DBAccount;
+    public dbAccount: DBAccount;
 
     constructor(dbAccount: DBAccount) {
         Logger.Info(TAG, `constructor: enter`);
         this.dbAccount = dbAccount;
+    }
+
+    public get id(): number {
+        return this.dbAccount.id;
     }
 
     public get username(): string {

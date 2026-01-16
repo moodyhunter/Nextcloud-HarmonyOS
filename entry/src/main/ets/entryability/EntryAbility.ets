@@ -33,7 +33,7 @@ export default class EntryAbility extends UIAbility {
             Logger.Info(TAG, 'Waiting for initialization to complete...');
             await AsyncSleep(100);
         }
-        Logger.Info(TAG, 'Main window is created, set main page for this ability');
+        Logger.Info(TAG, 'Initialization completed, proceeding to create main window.');
 
         let context = this.context;
         GlobalStorage.SandboxBasePath = context.filesDir;
@@ -47,8 +47,6 @@ export default class EntryAbility extends UIAbility {
             }
             await windowStage.loadContent(page);
             if (isPc) {
-                PersistentStorage.persistProp(Constants.PC_CLOUD_DISK_PATH, '');
-                PersistentStorage.persistProp(Constants.PC_CLOUD_DISK_ALIAS, '');
                 this.createTrayIcon();
             } else {
                 PersistentStorage.persistProp(Constants.VIEW_MODE_KEY, FolderViewMode.TwoColumns);
@@ -63,6 +61,9 @@ export default class EntryAbility extends UIAbility {
         Logger.Info(TAG, 'Main window created.');
     }
 
+    /**
+     * @throws
+     */
     async onPrepareToTerminateAsync(): Promise<boolean> {
         await this.context.hideAbility();
         return true;
@@ -88,23 +89,26 @@ export default class EntryAbility extends UIAbility {
         Logger.Info(TAG, `want: ${JSON.stringify(want)}, ${JSON.stringify(launchParam)}`);
     }
 
-    private convertToPixelMap(res: Resource) {
+    /**
+     * Convert Resource to PixelMap
+     * @throws
+     */
+    private convertToPixelMap(res: Resource): PixelMap {
         const resManager = this.context.resourceManager;
         const drawableDesc = resManager?.getDrawableDescriptor(res.id);
-        return drawableDesc?.getPixelMap();
+        return drawableDesc.getPixelMap();
     }
 
     private createTrayIcon() {
-        let menuItem: statusBarManager.StatusBarMenuItem = {
+        const menuItem: statusBarManager.StatusBarMenuItem = {
             title: "Main Window",
             menuAction: {
                 abilityName: "EntryAbility",
             }
         };
 
-        let trayIconImage = this.convertToPixelMap($r('app.media.tray_icon'));
-
         try {
+            let trayIconImage = this.convertToPixelMap($r('app.media.tray_icon'));
             statusBarManager.addToStatusBar(this.context, {
                 icons: {
                     black: trayIconImage,

@@ -23,9 +23,11 @@ export class DBAccount implements DBItem {
         return DBAccount.DB_TABLE_NAME;
     }
 
-    public toBucket(): relationalStore.ValuesBucket {
+    public toBucket(isCreate: boolean): relationalStore.ValuesBucket {
         let bucket: relationalStore.ValuesBucket = {};
-        bucket['account_id'] = this.id;
+        if (isCreate === false) {
+            bucket['account_id'] = this.id;
+        }
         bucket['username'] = this.username;
         bucket['password'] = this.password;
         bucket['hostname'] = this.hostname;

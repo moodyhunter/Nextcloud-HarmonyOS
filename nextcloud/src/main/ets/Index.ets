@@ -16,6 +16,10 @@ export { BasicDataSource } from './Utils/BasicDatasource';
 
 export { FilesDataSource } from './Utils/FilesDataSource';
 
+export { SyncConfiguration } from './Database/Types/SyncConfiguration';
+
+export { SyncFolderManager } from './SyncEngine/SyncFolderManager';
+
 export { TransferManager, TransferManagerImpl, TransferTask, TransferType } from './SyncEngine/TransferManager';
 
 export { CreatePath, UploadFile, DownloadFile } from './webdav/Uploader';

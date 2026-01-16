@@ -1,13 +1,14 @@
 import { relationalStore } from '@kit.ArkData';
 import { Logger } from '../Utils/Logger';
-import { DBAccountTableInfo } from './Types/DBAccount';
-import { DBLocalSyncFolderTableInfo } from './Types/DBLocalSyncFolder';
-import { DBRemoteFolderTable } from './Types/DBRemoteFolder';
+import { DBAccountTableInfo } from './DbTypes/DBAccount';
+import { DBLocalSyncFolderTable } from './DbTypes/DBLocalFolder';
+import { DBRemoteFolderTable } from './DbTypes/DBRemoteFolder';
 import { DEBUG } from '../../../../BuildProfile';
+import { DBSyncConfigurationTable } from './DbTypes/DBSyncConfiguration';
 
 const TAG = 'Database/DBManager';
 
-const CAN_RECREATE_DATABASE = false;
+const CAN_RECREATE_DATABASE = true;
 
 interface ForeignKeyDescriptor {
     target: DBTableDescriptor<string, DBItem>;
@@ -32,13 +33,14 @@ export interface DBTableDescriptor<TColumnName extends string, TItem> {
 export interface DBItem {
     getTableName(): string;
 
-    toBucket(): relationalStore.ValuesBucket;
+    toBucket(isCreate: boolean): relationalStore.ValuesBucket;
 }
 
 const TABLES: DBTableDescriptor<string, DBItem>[] = [
     DBAccountTableInfo,
     DBRemoteFolderTable,
-    DBLocalSyncFolderTableInfo,
+    DBLocalSyncFolderTable,
+    DBSyncConfigurationTable,
 ];
 
 export class DBManager {
@@ -179,25 +181,64 @@ export class DBManager {
         return result;
     }
 
-    async storeItem(object: DBItem): Promise<void> {
-        Logger.Info(TAG, 'storeObject: enter');
+    async getItemById<T extends DBItem>(id: number, column: ColumnDescriptor, factory: DBTableDescriptor<string, T>): Promise<T | null> {
+        Logger.Info(TAG, 'getItemById: enter');
         if (!this.store) {
-            Logger.Error(TAG, `storeObject: store is undefined`);
+            Logger.Error(TAG, `getItemById: store is undefined`);
+            return null;
+        }
+
+        let predicate = new relationalStore.RdbPredicates(factory.tableName);
+        predicate.equalTo(Object.keys(factory.columns).find(key => factory.columns[key] === column)!, id);
+
+        try {
+            let resultSet = await this.store.query(predicate);
+            if (resultSet.rowCount === 0) {
+                Logger.Warn(TAG, `getItemById: no item found with id=${id}`);
+                return null;
+            }
+            if (resultSet.goToNextRow()) {
+                let bucket = resultSet.getRow();
+                let item = factory.createItemFromBucket(bucket);
+                Logger.Info(TAG, `getItemById: completed, found item with id=${id}`);
+                return item;
+            }
+        } catch (error) {
+            Logger.Error(TAG, `getItemById: failed to read result set: ${JSON.stringify(error)}`);
+            return null;
+        }
+
+        Logger.Info(TAG, `getItemById: completed, no item found with id=${id}`);
+        return null;
+    }
+
+    async deleteItemById(id: number, object: DBItem): Promise<void> {
+        Logger.Info(TAG, 'deleteItemById: enter');
+        if (!this.store) {
+            Logger.Error(TAG, `deleteItemById: store is undefined`);
             return;
         }
 
-        let bucket = object.toBucket();
+        let predicate = new relationalStore.RdbPredicates(object.getTableName());
+        let bucket = object.toBucket(false);
+        let idColumnName = Object.keys(bucket).find(key => bucket[key] === id);
+        predicate.equalTo(idColumnName!, id);
+
         try {
-            let row = await this.store.insert(object.getTableName(), bucket);
-            if (!row) {
-                Logger.Error(TAG, `storeObject: failed to insert account, no row returned`);
-                return;
-            }
+            let deletedCount = await this.store.delete(predicate);
+            Logger.Info(TAG, `deleteItemById: completed, deleted ${deletedCount} rows from table ${object.getTableName()}`);
         } catch (error) {
-            Logger.Error(TAG, `storeObject: failed to insert account: ${JSON.stringify(error)}`);
-            return;
+            Logger.Error(TAG, `deleteItemById: failed to delete from table ${object.getTableName()}: ${JSON.stringify(error)}`);
         }
-        Logger.Info(TAG, 'storeObject: completed');
+
+    }
+
+    async createItem(object: DBItem): Promise<number | undefined> {
+        return this.doStoreItem(object, true);
+    }
+
+    async updateItem(object: DBItem): Promise<number | undefined> {
+        return this.doStoreItem(object, false);
     }
 
     async dropDatabase() {
@@ -206,7 +247,7 @@ export class DBManager {
             return;
         }
 
-        Logger.Warn(TAG, `dropAllTables: enter, SHOULD_RECREATE_DATABASE=${CAN_RECREATE_DATABASE}, DEBUG=${DEBUG}`);
+        Logger.Warn(TAG, `dropAllTables: enter, CAN_RECREATE_DATABASE=${CAN_RECREATE_DATABASE}, DEBUG=${DEBUG}`);
         if (CAN_RECREATE_DATABASE && DEBUG) {
             Logger.Warn(TAG, 'upgradeDatabase: recreating database as per ALWAYS_RECREATE_DATABASE flag');
             try {
@@ -238,6 +279,24 @@ export class DBManager {
             Logger.Warn(TAG, 'dropAllTables: completed');
         } else {
             Logger.Warn(TAG, 'dropAllTables: operation is disabled');
+        }
+    }
+
+    private async doStoreItem(object: DBItem, isCreate: boolean): Promise<number | undefined> {
+        Logger.Info(TAG, `doStoreItem: enter, isCreate=${isCreate}`);
+        if (!this.store) {
+            Logger.Error(TAG, `doStoreItem: store is undefined`);
+            return;
+        }
+
+        let bucket = object.toBucket(isCreate);
+        try {
+            let rowId = await this.store.insert(object.getTableName(), bucket);
+            Logger.Info(TAG, `doStoreItem: completed, rowId: ${rowId}`);
+            return rowId;
+        } catch (error) {
+            Logger.Error(TAG, `doStoreItem: failed to insert to table ${object.getTableName()}: ${JSON.stringify(error)}`);
+            return;
         }
     }
 }
