@@ -1,5 +1,5 @@
 import { photoAccessHelper as PHelper } from '@kit.MediaLibraryKit';
-import { CreatePath, Logger, Nextcloud, UploadFile } from '../Index';
+import { CreatePath, JobManager, Logger, Nextcloud, SyncConfiguration } from '../Index';
 import { promptAction } from '@kit.ArkUI';
 import { image } from '@kit.ImageKit';
 import { FormatTime } from '../Utils/CommonUtils';
@@ -21,9 +21,9 @@ export enum UploadResult {
     SUCCEEDED,
 }
 
-@Observed
+@ObservedV2
 export class PhotoItem {
-    uploadStatus: UploadStatus = UploadStatus.None;
+    @Trace uploadStatus: UploadStatus = UploadStatus.None;
     private innerAsset: PHelper.PhotoAsset;
 
     constructor(asset: PHelper.PhotoAsset) {
@@ -70,13 +70,13 @@ export class PhotoItem {
         return await this.innerAsset.getThumbnail(size);
     }
 
-    async upload(targetPath: string): Promise<UploadResult> {
-        const activeAccountId: number = 0;
-        const account = Nextcloud.getAccountById(activeAccountId);
+    async upload(basePath: string): Promise<UploadResult> {
+        const configuration = Nextcloud.getSyncFolderManager().allSyncConfigurations.values();
+        let realConfiguration = configuration.next().value as SyncConfiguration;
 
         this.uploadStatus = UploadStatus.Uploading;
-        let path = targetPath + FormatTime(this.dateTaken, DEFAULT_FORMAT);
-        let mkdirResult = await CreatePath(account, path);
+        const path = basePath + FormatTime(this.dateTaken, DEFAULT_FORMAT);
+        let mkdirResult = await CreatePath(realConfiguration.remoteFolder.account, path);
         if (mkdirResult !== 201 && mkdirResult !== 409 && mkdirResult !== 405) {
             // 405 is the status code for "already exists"
             Logger.Error(TAG, `Failed to create path: ${path}`);
@@ -88,8 +88,18 @@ export class PhotoItem {
 
         let ret: UploadResult = UploadResult.FAILED;
 
+        let job = JobManager.createUploadJob({
+            fileName: this.displayName,
+            mTime: this.dateTakenMs,
+            uri: this.uri,
+            localFolder: realConfiguration.localFolder,
+            remoteFolder: realConfiguration.remoteFolder,
+            relativePath: path + '/' + this.displayName,
+        });
+        await job.start();
+
         let message = "";
-        let uploadResult = await UploadFile(account, this.displayName, this.dateTakenMs, path, this.uri);
+        let uploadResult = job.statusCode;
         if (uploadResult !== 201 && uploadResult !== 204) {
             message = `Failed: ${this.displayName}: ${uploadResult}`;
             this.uploadStatus = UploadStatus.Failed;

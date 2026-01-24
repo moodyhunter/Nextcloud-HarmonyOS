@@ -96,4 +96,14 @@ export namespace NCommon {
         Logger.Info(TAG, "Common initialised with User-Agent: " + UserAgent());
         Preference = new NPreference(context);
     }
+
+    export function RandomString(length: number): string {
+        const CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' + 'abcdefghijklmnopqrstuvwxyz' + '0123456789';
+        let result = '';
+        const charactersLength = CHARACTERS.length;
+        for (let i = 0; i < length; i++) {
+            result += CHARACTERS.charAt(Math.floor(Math.random() * charactersLength));
+        }
+        return result;
+    }
 }

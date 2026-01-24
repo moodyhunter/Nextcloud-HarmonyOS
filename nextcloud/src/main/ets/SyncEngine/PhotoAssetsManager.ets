@@ -1,4 +1,3 @@
-import { Logger, NCommon } from '../Index';
 import { AddPosition, Category } from './Category';
 import { PhotoItem } from './PhotoItem';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
@@ -6,10 +5,10 @@ import { dataSharePredicates } from '@kit.ArkData';
 import { LocalFolder } from '../Database/Types/LocalFolder';
 import { LocalFolderType } from '../Database/DbTypes/DBLocalFolder';
 import { Nextcloud } from '../Main';
+import { NCommon } from '../Common';
+import { Logger } from '../Utils/Logger';
 
 const TAG = 'Utils/PhotoAssetsManager';
-
-const OWNER_ALBUM_ID = 'owner_album_id';
 
 @ObservedV2
 class PhotoAssetsManagerImpl {
@@ -28,53 +27,22 @@ class PhotoAssetsManagerImpl {
         photoAccessHelper.PhotoKeys.DYNAMIC_RANGE_TYPE,
         photoAccessHelper.PhotoKeys.DETAIL_TIME,
         photoAccessHelper.PhotoKeys.DATE_TAKEN_MS,
-        OWNER_ALBUM_ID, // API22
+        photoAccessHelper.PhotoKeys.OWNER_ALBUM_ID,
     ];
     @Trace public categories: Map<number, Category> = new Map();
-
-    private async getAllCategories(): Promise<number[]> {
-        const FETCH_OPTIONS: photoAccessHelper.FetchOptions = {
-            fetchColumns: [
-                photoAccessHelper.PhotoKeys.URI,
-                photoAccessHelper.PhotoKeys.DATE_TAKEN,
-                photoAccessHelper.PhotoKeys.DISPLAY_NAME,
-                OWNER_ALBUM_ID,
-            ],
-            predicates: new dataSharePredicates.DataSharePredicates()
-                .orderByDesc(photoAccessHelper.PhotoKeys.DATE_TAKEN)
-        };
-
-        let albums: number[] = [];
-        try {
-            let result = await NCommon.pHelper.getAssets(FETCH_OPTIONS);
-            while (!result.isAfterLast()) {
-                const photoItem = await result.getNextObject();
-                const albumId = photoItem.get(OWNER_ALBUM_ID) as number;
-                if (!albums.includes(albumId)) {
-                    albums.push(albumId);
-                    const displayName = photoItem.get(photoAccessHelper.PhotoKeys.DISPLAY_NAME);
-                    Logger.Debug(TAG, `found albumId: ${albumId} via '${displayName}'`);
-                }
-            }
-        } catch (e) {
-            Logger.Info(TAG, `failed to get all photos: ${JSON.stringify(e)}`);
-        }
-        albums.sort((a, b) => a - b);
-        return albums;
-    }
 
     public async loadNextBatchFromAlbumId(albumId: number, offset: number, limit: number): Promise<PhotoItem[]> {
         const FETCH_OPTIONS: photoAccessHelper.FetchOptions = {
             fetchColumns: PhotoAssetsManagerImpl.FETCH_COLUMNS,
             predicates: new dataSharePredicates.DataSharePredicates()
-                .equalTo(OWNER_ALBUM_ID, albumId.toString())
+                .equalTo(photoAccessHelper.PhotoKeys.OWNER_ALBUM_ID, albumId.toString())
                 .orderByDesc(photoAccessHelper.PhotoKeys.DATE_TAKEN)
                 .limit(limit, offset)
         };
 
         let result = await NCommon.pHelper.getAssets(FETCH_OPTIONS);
         let assets = await result.getAllObjects();
-        Logger.Info(TAG, `loadNextBatchFromAlbumId:`,
+        Logger.Info(TAG, `loadNextBatchFromAlbumId:` +
             `albumId: ${albumId}`,
             `offset: ${offset}`,
             `limit: ${limit} -> ${assets.length} assets`
@@ -132,13 +100,45 @@ class PhotoAssetsManagerImpl {
         }
     }
 
+    private async getAllCategories(): Promise<number[]> {
+        const FETCH_OPTIONS: photoAccessHelper.FetchOptions = {
+            fetchColumns: [
+                photoAccessHelper.PhotoKeys.URI,
+                photoAccessHelper.PhotoKeys.DATE_TAKEN,
+                photoAccessHelper.PhotoKeys.DISPLAY_NAME,
+                photoAccessHelper.PhotoKeys.OWNER_ALBUM_ID,
+            ],
+            predicates: new dataSharePredicates.DataSharePredicates()
+                .orderByDesc(photoAccessHelper.PhotoKeys.DATE_TAKEN)
+        };
+
+        let albums: number[] = [];
+        try {
+            let result = await NCommon.pHelper.getAssets(FETCH_OPTIONS);
+            while (!result.isAfterLast()) {
+                const photoItem = await result.getNextObject();
+                const albumId = photoItem.get(photoAccessHelper.PhotoKeys.OWNER_ALBUM_ID) as number;
+                if (!albums.includes(albumId)) {
+                    albums.push(albumId);
+                    const displayName = photoItem.get(photoAccessHelper.PhotoKeys.DISPLAY_NAME);
+                    Logger.Debug(TAG, `found albumId: ${albumId} via '${displayName}'`);
+                }
+            }
+        } catch (e) {
+            Logger.Info(TAG, `failed to get all photos: ${JSON.stringify(e)}`);
+        }
+        albums.sort((a, b) => a - b);
+        return albums;
+    }
+
     private async doAddPhotoItem(photoItem: PhotoItem, addPosition: AddPosition) {
         let ownerAlbumId = photoItem.ownerAlbumId;
         let category = this.categories.get(ownerAlbumId);
         if (category) {
             category.tryAddAsset(photoItem, addPosition);
+        } else {
+            Logger.Error(TAG, `add new category for ${ownerAlbumId} failed`);
         }
-        Logger.Error(TAG, `XXX: add new category for ${ownerAlbumId} failed`);
     }
 }
 

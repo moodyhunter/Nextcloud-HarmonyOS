@@ -1,15 +1,14 @@
 import {
     Account,
     DirectoryEntry,
-    DownloadFile,
+    JobManager,
     ListFiles,
     Logger,
     Nextcloud,
+    PhotoAssetsManager,
     SyncConfiguration,
     SyncFolderManager,
-    TransferManager,
-    TransferManagerImpl,
-    TransferTask,
+    TransferJob
 } from 'nextcloud';
 import { common } from '@kit.AbilityKit';
 import { fileIo, fileShare, fileUri, picker } from '@kit.CoreFileKit';
@@ -18,31 +17,31 @@ import { PermissionManager } from '../utils/PermissionManager';
 import { LengthMetrics } from '@kit.ArkUI';
 import { DownloadQueue } from '../utils/DownloadQueue';
 import { SettingsPage } from './SettingsPage';
-import { PhotoAssetsManager } from 'nextcloud/src/main/ets/SyncEngine/PhotoAssetsManager';
 import { UploadPage } from './UploadPage';
 import { emitter } from '@kit.BasicServicesKit';
 import { Constants } from '../utils/Common';
+import { PhotoMonitor } from '../utils/PhotoMonitor';
 
 const TAG = 'PcAbility'
 const OPERATION_MODES = fileShare.OperationMode.READ_MODE | fileShare.OperationMode.WRITE_MODE;
 
 @ComponentV2
 struct TransferProgressItem {
-    @Require @Param transferTask: TransferTask;
+    @Require @Param job: TransferJob;
 
     build() {
         Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, space: { main: LengthMetrics.vp(8) } }) {
-            Text(this.transferTask.filename)
+            Text(this.job.filename)
                 .width(180)
                 .textOverflow({ overflow: TextOverflow.MARQUEE })
                 .textAlign(TextAlign.End)
 
             Progress({
-                value: this.transferTask.transferredSize,
-                total: this.transferTask.totalSize,
+                value: this.job.transferredSize,
+                total: this.job.totalSize,
             })
 
-            Text(this.transferTask.progressPercentText)
+            Text(this.job.progressPercentText)
                 .width(100)
         }
     }
@@ -53,7 +52,6 @@ struct SyncConfigurationRow {
     @Require @Param readonly syncFolderManager: SyncFolderManager;
     @Require @Param readonly configuration: SyncConfiguration;
     @Require @Param readonly account: Account;
-    private downloadQueue: DownloadQueue = new DownloadQueue();
 
     build() {
         Row({ space: 8 }) {
@@ -92,9 +90,11 @@ struct SyncConfigurationRow {
 
     private async doDownloadAll() {
         Logger.Info(TAG, `sync all`);
-        this.downloadQueue.addRootDir(this.account);
-        while (this.downloadQueue.hasPendingItem()) {
-            let next = await this.downloadQueue.getNextDownloadFile();
+
+        const downloadQueue: DownloadQueue = new DownloadQueue();
+        downloadQueue.addRootDir(this.account);
+        while (downloadQueue.hasPendingItem()) {
+            let next = await downloadQueue.getNextDownloadFile();
             if (next === undefined) {
                 break;
             }
@@ -105,13 +105,15 @@ struct SyncConfigurationRow {
                 } catch (e) {
                 }
             } else {
-                await DownloadFile(
-                    this.account,
-                    next.relativePath,
-                    this.configuration.localFolder.localPath +
-                    '/' +
-                    next.relativePath
-                );
+                const fileName = next.relativePath.split('/').pop() || '<unknown>';
+                let transferJob = JobManager.addDownloadJob({
+                    fileName: fileName,
+                    localFolder: this.configuration.localFolder,
+                    remoteFolder: this.configuration.remoteFolder,
+                    relativePath: next.relativePath
+                });
+                transferJob.start();
+                break;
             }
             Logger.Info(TAG, next.relativePath);
         }
@@ -127,7 +129,6 @@ struct PCAbility {
     @Local private opHistory: CloudSyncApi.FileChangeInfo[] = [];
     @Local private files: DirectoryEntry[] = [];
     @Local private syncFolderManager: SyncFolderManager = Nextcloud.getSyncFolderManager();
-    @Local private transferManager: TransferManagerImpl = TransferManager;
     private pendingMoveTo: Map<string, string> = new Map();
 
     @Builder
@@ -194,13 +195,13 @@ struct PCAbility {
                 Text('download progress')
 
                 List() {
-                    LazyForEach(this.transferManager.tasks, (item: TransferTask) => {
+                    LazyForEach(JobManager.tasks, (item: TransferJob) => {
                         ListItem() {
                             TransferProgressItem({
-                                transferTask: item
+                                job: item
                             })
                         }
-                    }, (item: TransferTask, _index: number) => {
+                    }, (item: TransferJob, _index: number) => {
                         return `${item.id}`
                     })
                 }
@@ -242,6 +243,7 @@ struct PCAbility {
         ]);
 
         PhotoAssetsManager.initialize(this.syncFolderManager.allLocalFolders);
+        PhotoMonitor.beginMonitorPhotoChange();
         for (let conf of this.syncFolderManager.allSyncConfigurations.values()) {
             Logger.Info(TAG, `conf: ${conf.id} - ${conf.localFolder.localPath} <=> ${conf.remoteFolder.remotePath}`);
             CloudSyncApi.connect(conf.localFolder.localPath);

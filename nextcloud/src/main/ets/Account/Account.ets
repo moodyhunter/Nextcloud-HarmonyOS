@@ -46,6 +46,10 @@ export class Account {
         return `https://${this.dbAccount.hostname}/remote.php/dav/files/${this.dbAccount.username}/`;
     }
 
+    public chunkedUploadBaseUrl(): string {
+        return `https://${this.dbAccount.hostname}/remote.php/dav/uploads/${this.dbAccount.username}/`;
+    }
+
     public getPreviewUrl(fileId: string, x: number = 64, y: number = 64): string {
         return this.baseUrlWithCredentials + `/core/preview?fileId=${fileId}&x=${x}&y=${y}&mimeFallback=true`;
     }

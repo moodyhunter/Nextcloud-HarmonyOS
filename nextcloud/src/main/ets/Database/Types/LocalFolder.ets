@@ -1,4 +1,6 @@
-import { DBLocalSyncFolder, LocalFolderType } from "../DbTypes/DBLocalFolder";
+import { DBLocalSyncFolder, LocalFolderType } from '../DbTypes/DBLocalFolder';
+
+export interface LocalFolderItem {}
 
 export class LocalFolder {
     private dbLocalFolder_: DBLocalSyncFolder;
@@ -35,5 +37,21 @@ export class LocalFolder {
 
     public get alias(): string {
         return this.dbLocalFolder_.alias;
+    }
+
+    public set alias(newAlias: string) {
+        this.dbLocalFolder_.alias = newAlias;
+    }
+
+    public getFullPath(relativePath: string): string {
+        if (this.dbLocalFolder_.folderType === LocalFolderType.Regular) {
+            if (this.localPath.endsWith('/')) {
+                return this.localPath + relativePath;
+            } else {
+                return this.localPath + '/' + relativePath;
+            }
+        } else {
+            return "";
+        }
     }
 }

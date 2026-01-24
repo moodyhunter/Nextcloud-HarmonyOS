@@ -1,4 +1,4 @@
-import { Account, DirectoryEntry, ListFiles, Logger } from "nextcloud";
+import { Account, DirectoryEntry, ListFiles, Logger } from 'nextcloud';
 
 const DOWNLOAD_DEPTH_FIRST: boolean = true;
 const TAG = 'Utils/DownloadQueue';
@@ -19,7 +19,6 @@ export class DownloadItem {
         return new DownloadItem(this.account, relativePath + filename, isDirectory);
     }
 }
-
 
 export class DownloadQueue {
     queue: DownloadItem[] = [];
@@ -55,7 +54,6 @@ export class DownloadQueue {
             Logger.Debug(TAG, `downloading dir: ${next.relativePath}`);
             let items = await ListFiles(next.account, next.relativePath);
             let downloadItems = items.map((item: DirectoryEntry): DownloadItem => {
-                Logger.Info(TAG, `${item.name}`);
                 return next!.makeChildItem(item.name, item.isDirectory);
             });
 

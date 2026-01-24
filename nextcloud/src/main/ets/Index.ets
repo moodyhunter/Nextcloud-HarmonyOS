@@ -2,6 +2,12 @@
  * Nextcloud module entry point
  */
 
+export { SyncConfiguration } from './Database/Types/SyncConfiguration';
+
+export { TransferJob, TransferJobData } from './SyncEngine/Jobs/TransferJob';
+
+export { UploadStatus } from './SyncEngine/PhotoItem';
+
 export { NCommon } from './Common';
 
 export { ListFiles } from './webdav/Files';
@@ -16,19 +22,17 @@ export { BasicDataSource } from './Utils/BasicDatasource';
 
 export { FilesDataSource } from './Utils/FilesDataSource';
 
-export { SyncConfiguration } from './Database/Types/SyncConfiguration';
+export { JobManager, JobManagerImpl } from './SyncEngine/TransferManager';
 
 export { SyncFolderManager } from './SyncEngine/SyncFolderManager';
 
-export {
-    TransferManager,
-    TransferManagerImpl,
-    TransferTask,
-} from './SyncEngine/TransferManager';
-
 export { PhotoAssetsManager } from './SyncEngine/PhotoAssetsManager';
 
-export { CreatePath, UploadFile, DownloadFile } from './webdav/Uploader';
+export { Category } from './SyncEngine/Category';
+
+export { PhotoItem } from './SyncEngine/PhotoItem';
+
+export { CreatePath } from './webdav/TransferUtils';
 
 export { Logger } from './Utils/Logger';
 

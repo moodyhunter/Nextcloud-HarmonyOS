@@ -1,17 +1,13 @@
-import { Logger, NCommon } from 'nextcloud';
-import { Category } from 'nextcloud/src/main/ets/SyncEngine/Category';
+import { Category, Logger, PhotoAssetsManager, PhotoItem, UploadStatus } from 'nextcloud';
 import { LengthMetrics } from '@kit.ArkUI';
-import { PhotoItem, UploadStatus } from 'nextcloud/src/main/ets/SyncEngine/PhotoItem';
-import { PhotoAssetsManager } from 'nextcloud';
 
 const TAG = "Page-UploadPage"
 
-
-@Component
+@ComponentV2
 struct PhotoView {
-    @ObjectLink asset: PhotoItem;
-    @ObjectLink category: Category;
-    @State private thumbnail: PixelMap | null = null;
+    @Require @Param asset: PhotoItem;
+    @Require @Param category: Category;
+    @Local private thumbnail: PixelMap | null = null;
 
     getUploadColor(status: UploadStatus): Color {
         switch (status) {
@@ -48,7 +44,7 @@ struct PhotoView {
         .borderWidth(3)
         .borderColor(this.getUploadColor(this.asset.uploadStatus))
         .onClick(async () => {
-            // await this.asset.upload(NCommon.Preference.baseUploadDirectory + this.category.location);
+            await this.asset.upload("/instantupload/category/");
         })
         .onAppear(async () => {
             if (this.thumbnail === null) {
@@ -58,28 +54,31 @@ struct PhotoView {
     }
 }
 
-@Component
-struct PhotosGridView {
-    @ObjectLink category: Category;
-    private scroller: Scroller = new Scroller();
+@Preview
+@ComponentV2
+export struct UploadPage {
+    @Local private categories: Map<number, Category> = PhotoAssetsManager.categories;
 
-    build() {
+    @Builder
+    photosGridView(category: Category) {
         Stack() {
-            Grid(this.scroller) {
-                LazyForEach(this.category.visibleItems, (asset: PhotoItem, index: number) => {
+            Grid() {
+                LazyForEach(category.visibleItems, (asset: PhotoItem, index: number) => {
                     GridItem() {
-                        PhotoView({ asset: asset, category: this.category })
+                        PhotoView({ asset: asset, category: category })
                     }
                     .width('100%')
                     .onAppear(() => {
-                        if (index == this.category.visibleItems.totalCount() - 1) {
-                            this.category.loadNextBatch();
+                        if (index == category.visibleItems.totalCount() - 1) {
+                            category.loadNextBatch();
                         }
                     })
                 })
             }
+            .layoutDirection(GridDirection.Row)
             .fadingEdge(true, { fadingEdgeLength: LengthMetrics.vp(80) })
-            .columnsTemplate('1fr 1fr 1fr 1fr')
+            // .columnsTemplate('1fr 1fr 1fr 1fr')
+            .columnsTemplate('repeat(auto-fit, 100)')
             .scrollBar(BarState.On)
             .edgeEffect(EdgeEffect.Spring)
             .columnsGap(8)
@@ -91,7 +90,7 @@ struct PhotosGridView {
             Column() {
                 Button($r('app.string.upload_all'))
                     .onClick(() => {
-                        Logger.Info(TAG, `Upload all in '${this.category.name}'`);
+                        Logger.Info(TAG, `Upload all in '${category.name}'`);
                         // this.category.uploadAllAssets();
                     })
                     .width('30%')
@@ -100,39 +99,38 @@ struct PhotosGridView {
             .position({ bottom: 5 })
         }
     }
-}
-
-
-@Preview
-@ComponentV2
-export struct UploadPage {
-    @Local private categories: Map<number, Category> = PhotoAssetsManager.categories;
 
     build() {
         Tabs() {
             ForEach(Array.from(this.categories), (category: [number, Category]) => {
-                TabContent() {
-                    Flex({ direction: FlexDirection.Column, space: { main: LengthMetrics.px(20) } }) {
-                        Flex({
-                            direction: FlexDirection.Row,
-                            justifyContent: FlexAlign.SpaceBetween,
-                            alignItems: ItemAlign.Baseline,
-                        }) {
-                            Text(category[1].name)
-                                .fontWeight(FontWeight.Bold)
-                                .fontSize(24)
+                if (category[1].visibleItems.totalCount() >= 10) {
+                    TabContent() {
+                        Flex({ direction: FlexDirection.Column, space: { main: LengthMetrics.px(20) } }) {
+                            Row({ space: 16 }) {
+                                TextInput({ text: category[1].name })
+                                    .fontWeight(FontWeight.Bold)
+                                    .fontSize(24)
+                                    .onChange((newValue: string) => {
+                                        category[1].setAlias(newValue);
+                                    })
+                                    .flexShrink(1)
 
-                            Text('category.location')
+                                Text('category.location')
+                                    .flexShrink(0)
+                                    .constraintSize({ minWidth: 120 })
+                            }
+                            .justifyContent(FlexAlign.Center)
+                            .height(60)
+                            .width('100%')
+
+                            this.photosGridView(category[1])
                         }
-                        .height(32)
-
-                        PhotosGridView({ category: category[1] })
+                        .width('100%')
+                        .height('100%')
                     }
-                    .width('100%')
-                    .height('100%')
+                    .margin(10)
+                    .tabBar(category[1].name)
                 }
-                .margin(10)
-                .tabBar(category[1].name)
             })
         }
         .vertical(true)

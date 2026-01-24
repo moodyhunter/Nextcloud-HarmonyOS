@@ -1,32 +1,32 @@
-import { commonEventManager } from "@kit.BasicServicesKit";
-import { Logger } from "../Index";
+import { commonEventManager } from '@kit.BasicServicesKit';
+import { Logger } from '../Index';
 
 const TAG = 'SyncEngine/TransferManager/IPC';
 
 export enum TransferType {
-    DOWNLOAD,
-    UPLOAD,
+    Download,
+    Upload,
 }
 
-export interface ITransferTask {
+export interface TransferJobBasicInfo {
     id: number;
     type: TransferType;
-    filename: string;
+    fileName: string;
     totalSize: number;
     transferredSize: number;
 }
 
 export enum TransferManagerEventCode {
-    TASK_CREATE = 1,
+    TASK_CREATED = 1,
     TASK_PROGRESS = 2,
     TASK_COMPLETED = 3,
     TASK_FAILED = 4,
 }
 
 interface TransferManagerEvent_TaskCreate {
-    code: TransferManagerEventCode.TASK_CREATE;
+    code: TransferManagerEventCode.TASK_CREATED;
     taskId: number;
-    task: ITransferTask;
+    task: TransferJobBasicInfo;
 };
 
 interface TransferManagerEvent_TaskProgress {
@@ -47,9 +47,9 @@ interface TransferManagerEvent_TaskFailed {
 
 export type TransferManagerEvent =
     TransferManagerEvent_TaskCreate
-    | TransferManagerEvent_TaskProgress
-    | TransferManagerEvent_TaskCompleted
-    | TransferManagerEvent_TaskFailed;
+        | TransferManagerEvent_TaskProgress
+        | TransferManagerEvent_TaskCompleted
+        | TransferManagerEvent_TaskFailed;
 
 export const TRANSFER_MANAGER_COMMON_EVENT_NAME: string = 'Nextcloud.TransferManager.Events';
 

@@ -1,14 +1,9 @@
-import { Logger } from '../Utils/Logger';
 import { ImageListDataSource } from './ImageListDataSource';
-import {
-    PhotoItem,
-    UploadResult
-} from './PhotoItem';
-import { promptAction } from '@kit.ArkUI';
-import { NCommon } from '../Common';
+import { PhotoItem } from './PhotoItem';
 import { LocalFolder } from '../Database/Types/LocalFolder';
 import { LocalFolderType } from '../Database/DbTypes/DBLocalFolder';
 import { PhotoAssetsManager } from './PhotoAssetsManager';
+import { Logger } from '../Utils/Logger';
 
 const TAG = 'models/Category';
 
@@ -23,15 +18,12 @@ export enum AddPosition {
     Prepend
 }
 
-const IMAGE_LIST_MAX_ITEMS = 50;
+const BATCH_SIZE = 150;
 
-@Observed
+@ObservedV2
 export class Category {
-    private localFolder: LocalFolder;
-    /**
-     * Items that are currently visible on the UI (not all assets are listed for performance reason)
-     */
     visibleItems: ImageListDataSource = new ImageListDataSource();
+    private localFolder: LocalFolder;
 
     constructor(localFolder: LocalFolder) {
         if (localFolder.folderType !== LocalFolderType.PhotoAlbum) {
@@ -45,8 +37,13 @@ export class Category {
         return this.localFolder.alias;
     }
 
+    public setAlias(newAlias: string) {
+        this.localFolder.alias = newAlias;
+    }
+
     tryAddAsset(asset: PhotoItem, position: AddPosition): AddAssetResult {
         if (!this.matchesAsset(asset)) {
+            Logger.Error(TAG, `tryAddAsset: asset albumId ${asset.ownerAlbumId} doesn't match category albumId ${this.localFolder.albumId}`);
             return AddAssetResult.Unmatched;
         }
 
@@ -59,39 +56,21 @@ export class Category {
                 this.visibleItems.prependAsset(asset);
                 return AddAssetResult.Added;
             }
+            default: {
+                Logger.Error(TAG, `tryAddAsset: unknown position ${position}`);
+                return AddAssetResult.Unmatched;
+            }
         }
     }
 
     async loadNextBatch(): Promise<void> {
         const offset = this.visibleItems.totalCount();
-        let items = await PhotoAssetsManager.loadNextBatchFromAlbumId(this.localFolder.albumId, offset, 50);
+        let items = await PhotoAssetsManager.loadNextBatchFromAlbumId(this.localFolder.albumId, offset, BATCH_SIZE);
         for (let item of items) {
             this.visibleItems.addAsset(item);
         }
     }
 
-    getAssets(start: number, length: number): PhotoItem[] {
-        let result: PhotoItem[] = [];
-        // Get from items if it's completely within range
-        if (start + length <= this.visibleItems.totalCount()) {
-            result = this.visibleItems.getDataRange(start, length);
-        } else if (start >= this.visibleItems.totalCount()) {
-            // Get from backedItems if it's completely within backedItems
-            let backedStart = start - this.visibleItems.totalCount();
-            // for (let i = backedStart; i < Math.min(backedStart + length, this.invisibleBackedItems.size); i++) {
-            // result.push(this.invisibleBackedItems[i]);
-            // }
-        } else {
-            // Get from both items and backedItems
-            let itemsPartLength = this.visibleItems.totalCount() - start;
-            result = this.visibleItems.getDataRange(start, itemsPartLength);
-            let backedPartLength = length - itemsPartLength;
-            // for (let i = 0; i < Math.min(backedPartLength, this.invisibleBackedItems.size); i++) {
-            // result.push(this.invisibleBackedItems[i]);
-            // }
-        }
-        return result;
-    }
 
     // getTotalAvailableCount(): number {
     //     return this.visibleItems.totalCount() + this.invisibleBackedItems.size;
@@ -133,6 +112,6 @@ export class Category {
     // }
 
     private matchesAsset(asset: PhotoItem): boolean {
-        return asset.ownerAlbumId === this.localFolder.id;
+        return asset.ownerAlbumId === this.localFolder.albumId;
     }
 }

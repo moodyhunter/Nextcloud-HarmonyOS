@@ -2,7 +2,7 @@ import { UIExtensionContentSession, Want } from '@kit.AbilityKit';
 import { StatusBarViewExtensionAbility } from '@kit.DeskTopExtensionKit';
 import { Logger } from 'nextcloud';
 
-const TAG = 'StatusBarView';
+const TAG = 'StatusBar/Ability';
 
 export default class StatusBarView extends StatusBarViewExtensionAbility {
     onCreate() {

@@ -1,4 +1,4 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, ConfigurationConstant, UIAbility, Want, wantAgent } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AsyncSleep, InitialiseNextcloud, Logger, NCommon } from 'nextcloud';
 import { Constants, FolderViewMode } from '../utils/Common';
@@ -7,6 +7,8 @@ import { NotificationManager } from '../utils/NotificationManager';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { statusBarManager } from '@kit.DeskTopExtensionKit';
+import { BUNDLE_NAME } from 'BuildProfile';
+import backgroundTaskManager from '@ohos.resourceschedule.backgroundTaskManager';
 
 const TAG = 'EntryAbility';
 
@@ -34,14 +36,6 @@ export default class EntryAbility extends UIAbility {
         Logger.Info(TAG, 'Ability onDestroy');
     }
 
-    private async ensureInitCompleted() {
-        while (!this.initCompleted) {
-            Logger.Info(TAG, 'Waiting for initialization to complete...');
-            await AsyncSleep(100);
-        }
-        Logger.Info(TAG, 'Initialization completed, proceeding to create main window.');
-    }
-
     async onWindowStageCreate(windowStage: window.WindowStage) {
         await this.ensureInitCompleted();
         let context = this.context;
@@ -49,7 +43,7 @@ export default class EntryAbility extends UIAbility {
 
         try {
             let page = this.isPc ? 'pages/PcMainPage' : 'pages/Index';
-            await NotificationManager.startNotification(this.context);
+            await this.startBackgroundRunning();
             NCommon.pHelper = photoAccessHelper.getPhotoAccessHelper(this.context);
             await windowStage.loadContent(page);
             if (this.isPc) {
@@ -97,6 +91,37 @@ export default class EntryAbility extends UIAbility {
 
     onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
         Logger.Info(TAG, `want: ${JSON.stringify(want)}, ${JSON.stringify(launchParam)}`);
+    }
+
+    private async startBackgroundRunning() {
+        Logger.Info(TAG, `startBackgroundRunning`);
+        try {
+            const WANT_AGENT_INFO: wantAgent.WantAgentInfo = {
+                wants: [{ bundleName: BUNDLE_NAME, abilityName: "EntryAbility" }],
+                actionType: wantAgent.OperationType.START_ABILITY,
+                requestCode: 0,
+                wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+            };
+            let wantAgentObj = await wantAgent.getWantAgent(WANT_AGENT_INFO);
+            let req = new backgroundTaskManager.ContinuousTaskRequest();
+            req.backgroundTaskModes = [backgroundTaskManager.BackgroundTaskMode.MODE_TASK_KEEPING];
+            req.backgroundTaskSubmodes = [backgroundTaskManager.BackgroundTaskSubmode.SUBMODE_NORMAL_NOTIFICATION];
+            req.wantAgent = wantAgentObj;
+
+            let res = await backgroundTaskManager.startBackgroundRunning(this.context, req);
+            Logger.Info(TAG, `startBackgroundRunning: succeeded: ${JSON.stringify(res)}`);
+        } catch (error) {
+            let e = error as BusinessError;
+            Logger.Error(TAG, `startBackgroundRunning: failed. code is ${e.code} message is ${e.message}`);
+        }
+    }
+
+    private async ensureInitCompleted() {
+        while (!this.initCompleted) {
+            Logger.Info(TAG, 'Waiting for initialization to complete...');
+            await AsyncSleep(100);
+        }
+        Logger.Info(TAG, 'Initialization completed, proceeding to create main window.');
     }
 
     /**

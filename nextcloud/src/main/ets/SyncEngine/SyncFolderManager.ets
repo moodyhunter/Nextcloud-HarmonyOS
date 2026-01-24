@@ -8,6 +8,7 @@ import { DBLocalSyncFolder, DBLocalSyncFolderTable, LocalFolderType } from '../D
 import { DBRemoteFolder, DBRemoteFolderTable } from '../Database/DbTypes/DBRemoteFolder';
 import { Account } from '../Account/Account';
 import { SyncConfiguration } from '../Database/Types/SyncConfiguration';
+import { Nextcloud } from '../Main';
 
 const TAG = 'SyncEngine/SyncFolderManager';
 
@@ -25,6 +26,10 @@ export class SyncFolderManager {
 
     public get allLocalFolders(): Map<number, LocalFolder> {
         return this.localFolders_;
+    }
+
+    public get allRemoteFolders(): Map<number, RemoteFolder> {
+        return this.remoteFolders_;
     }
 
     public get allSyncConfigurations(): Map<number, SyncConfiguration> {
@@ -60,7 +65,7 @@ export class SyncFolderManager {
     public async addRemoteFolder(account: Account, remotePath: string, alias: string): Promise<RemoteFolder> {
         Logger.Info(TAG, `addRemoteFolder: enter`);
         let dbRemoteFolder = new DBRemoteFolder(0, account.id, remotePath, alias);
-        let remoteFolder = new RemoteFolder(dbRemoteFolder);
+        let remoteFolder = new RemoteFolder(account, dbRemoteFolder);
         let insertedId = await this.dbManager_.createItem(dbRemoteFolder);
         dbRemoteFolder.id = insertedId!;
         this.remoteFolders_.set(dbRemoteFolder.id, remoteFolder);
@@ -102,7 +107,8 @@ export class SyncFolderManager {
 
         let remoteFolders = await this.dbManager_.getItems(DBRemoteFolderTable);
         for (let remoteFolder of remoteFolders) {
-            this.remoteFolders_.set(remoteFolder.id, new RemoteFolder(remoteFolder));
+            let account = Nextcloud.getAccountById(remoteFolder.accountId);
+            this.remoteFolders_.set(remoteFolder.id, new RemoteFolder(account, remoteFolder));
         }
 
         let dbSyncConfiguration = await this.dbManager_.getItems(DBSyncConfigurationTable);
@@ -162,7 +168,9 @@ export class SyncFolderManager {
             Logger.Error(TAG, `getRemoteFolderById: remote folder id ${id} not found`);
             return null;
         }
-        existing = new RemoteFolder(dbRemoteFolder);
+
+        let account = Nextcloud.getAccountById(dbRemoteFolder.accountId);
+        existing = new RemoteFolder(account, dbRemoteFolder);
         this.remoteFolders_.set(id, existing);
         return existing;
     }
