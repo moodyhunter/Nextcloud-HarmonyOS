@@ -5,19 +5,6 @@ import { ShowToast } from '../utils/Utils';
 
 const TAG = 'pages/Settings';
 
-@Observed
-class EditableCategory implements NCommon.CategoryConfig {
-    name: string;
-    patterns: string[];
-    location: string;
-
-    constructor(other: NCommon.CategoryConfig) {
-        this.name = other.name;
-        this.patterns = other.patterns;
-        this.location = other.location;
-    }
-}
-
 @Component
 export struct SettingsPage {
     scroller: Scroller = new Scroller();
@@ -26,7 +13,6 @@ export struct SettingsPage {
     @State private hostname: string = "<hostname>";
     @State private uploadReplaceExisting: boolean = false;
     @State private uploadBaseDirectory: string = '/';
-    @State private uploadCategories: EditableCategory[] = [];
 
     aboutToAppear(): void {
         this.doLoadSettings();
@@ -112,33 +98,6 @@ export struct SettingsPage {
                             .width('100%')
                             .fontWeight(FontWeight.Bold)
                             .fontSize($r('sys.float.subheader_title_font_size'))
-
-                        ForEach(this.uploadCategories, (category: EditableCategory, _index: number) => {
-                            Column({ space: 4 }) {
-                                Row() {
-                                    Text(category.name)
-                                        .fontWeight(FontWeight.Bold)
-
-                                    Text(this.uploadBaseDirectory + category.location)
-                                        .fontSize(12)
-                                        .fontColor(Color.Gray)
-                                }
-                                .justifyContent(FlexAlign.SpaceBetween)
-                                .width('100%')
-
-                                ForEach(category.patterns, (pattern: string, patternIndex: number) => {
-                                    TextInput({ text: pattern })
-                                        .fontSize(12)
-                                        .fontFamily('monospace')
-                                        .width('100%')
-                                        .onChange((content) => {
-                                            category.patterns[patternIndex] = content;
-                                        })
-                                })
-                            }
-                            .width('100%')
-                            .padding(8)
-                        })
                     }
                 }
                 .margin({ left: 24, right: 24 })
@@ -174,10 +133,6 @@ export struct SettingsPage {
             this.hostname = this.currentAccount.hostname;
             this.uploadReplaceExisting = NCommon.Preference.replaceExistingFiles;
             this.uploadBaseDirectory = NCommon.Preference.baseUploadDirectory;
-            this.uploadCategories = [];
-            for (let c of NCommon.Preference.categories) {
-                this.uploadCategories.push(new EditableCategory(c));
-            }
         } else {
             Logger.Error(TAG, `failed to load settings, preference is undefined`);
         }
@@ -187,7 +142,6 @@ export struct SettingsPage {
         if (NCommon.Preference) {
             NCommon.Preference.replaceExistingFiles = this.uploadReplaceExisting;
             NCommon.Preference.baseUploadDirectory = this.uploadBaseDirectory;
-            NCommon.Preference.categories = this.uploadCategories;
         } else {
             Logger.Error(TAG, `failed to save settings, preference is undefined`);
         }

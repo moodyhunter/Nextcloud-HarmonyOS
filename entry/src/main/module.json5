@@ -9,6 +9,15 @@
         "name": "ohos.permission.INTERNET"
       },
       {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING_SYSTEM",
+        "reason": "$string:permission_media_location_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ]
+        }
+      },
+      {
         "name": "ohos.permission.READ_IMAGEVIDEO",
         "reason": "$string:permission_image_video_reason",
         "usedScene": {
@@ -66,7 +75,7 @@
           }
         ],
         "backgroundModes": [
-          "dataTransfer"
+          "taskKeeping"
         ]
       }
     ],

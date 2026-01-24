@@ -1,4 +1,4 @@
-import { BasicDataSource } from 'nextcloud';
+import { BasicDataSource } from '../Utils/BasicDatasource';
 import { PhotoItem } from './PhotoItem';
 
 

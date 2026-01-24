@@ -1,61 +1,25 @@
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { preferences } from '@kit.ArkData';
 import { Logger } from './Utils/Logger';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
 
 
 const TAG = "Nextcloud-Common";
 
 const USER_AGENT_PART = "Nextcloud Client for HarmonyOS on ";
 
-export const DEFAULT_CATEGORIES: NCommon.CategoryConfig[] = [
-    {
-        name: 'Camera',
-        location: 'Camera/',
-        patterns: [
-            String.raw`^(IMG)_\d{8}_\d{6}(_\d{3})?(.*)\.(\w+)$`,
-            String.raw`^(S?VID)_\d{8}_\d{6}\.(\w+)$`,
-        ],
-    },
-    {
-        name: 'Screenshot',
-        location: 'Screenshots/',
-        patterns: [
-            String.raw`^((Watch)?[Ss]creenshot)_\d{8}_\d{6}(.*)\.(\w+)$`,
-            String.raw`^(S?VID)_\d{8}_\d{6}_\d+\.(\w+)$`
-        ],
-    },
-    {
-        name: 'Misc',
-        location: 'Others/',
-        patterns: [
-            String.raw`^(IMG)_(\d+)\.(\w+)$`,
-            String.raw`^(image)_(\d+)\.(\w+)$`,
-            String.raw`^(S?VID)_(\d+)\.(\w+)$`,
-            String.raw`^(alipay)_(\d+)\.(\w+)$`,
-        ],
-    },
-    {
-        name: "Unmatched",
-        location: 'Others-unmatched/',
-        patterns: [".*"],
-    },
-];
-
-
 type LOGIN_APP_PASSWORD = "login.appPassword";
 type LOGIN_USERNAME = "login.username";
 type LOGIN_SERVER = "login.server";
 type UPLOAD_BASE_DIRECTORY = "upload.baseDir";
 type UPLOAD_REPLACE_EXISTING = "upload.replaceExisting";
-type UPLOAD_CATEGORIES = "upload.categories";
 
 type SETTINGS_KEYS =
     LOGIN_APP_PASSWORD |
     LOGIN_USERNAME |
     LOGIN_SERVER |
     UPLOAD_BASE_DIRECTORY |
-    UPLOAD_REPLACE_EXISTING |
-    UPLOAD_CATEGORIES;
+    UPLOAD_REPLACE_EXISTING;
 
 class NPreference {
     private pref: preferences.Preferences;
@@ -83,19 +47,6 @@ class NPreference {
 
     set baseUploadDirectory(dir: string) {
         this.setPref('upload.baseDir', dir);
-    }
-
-    get categories(): NCommon.CategoryConfig[] {
-        let stringConfig = this.getPref('upload.categories', "");
-        if (stringConfig === "") {
-            return DEFAULT_CATEGORIES;
-        }
-        return JSON.parse(stringConfig) as NCommon.CategoryConfig[];
-    }
-
-    set categories(categories: NCommon.CategoryConfig[]) {
-        let stringConfig = JSON.stringify(categories);
-        this.setPref('upload.categories', stringConfig);
     }
 
     public getPref<T>(key: SETTINGS_KEYS, defaultValue: T): T {
@@ -126,16 +77,12 @@ class NPreference {
 
 
 export namespace NCommon {
-    export interface CategoryConfig {
-        name: string;
-        patterns: string[];
-        location: string;
-    }
-
     /**
      * Preferences for Nextcloud
      */
     export let Preference: NPreference;
+
+    export let pHelper: photoAccessHelper.PhotoAccessHelper;
 
     export function UserAgent() {
         return USER_AGENT_PART + deviceInfo.marketName + " (" + deviceInfo.productModel + ")";

@@ -7,7 +7,7 @@ import { SettingsPage } from './SettingsPage';
 import { FolderPage } from './FolderPage';
 import { Constants, FolderViewMode } from '../utils/Common';
 import { PermissionManager } from '../utils/PermissionManager';
-import { PhotoAssetsManager } from '../utils/PhotoAssetsManager';
+import { PhotoAssetsManager } from 'nextcloud/src/main/ets/SyncEngine/PhotoAssetsManager';
 import { PhotoMonitor } from '../utils/PhotoMonitor';
 import { ShowToast } from '../utils/Utils';
 import { Permissions } from '@kit.AbilityKit';
@@ -59,7 +59,7 @@ struct Index {
         ];
         let result = await PermissionManager.RequestPermission(context, PERMISSIONS);
         Logger.Info(TAG, `Request permission result: ${result}`);
-        PhotoAssetsManager.initialize(NCommon.Preference.categories);
+        PhotoAssetsManager.initialize(Nextcloud.getSyncFolderManager().allLocalFolders);
         PhotoMonitor.beginMonitorPhotoChange();
     }
 

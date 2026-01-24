@@ -1,8 +1,8 @@
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { Logger } from 'nextcloud';
+import { Logger, NCommon } from 'nextcloud';
 import { GlobalStorage } from './GlobalStorage';
-import { Notification } from './NotificationManager';
-import { PhotoAssetsManager } from './PhotoAssetsManager';
+import { NotificationManager } from './NotificationManager';
+import { PhotoAssetsManager } from 'nextcloud';
 
 const TAG = 'Utils-PhotoMonitor';
 
@@ -17,7 +17,11 @@ class PhotoMonitorImpl {
 
     public beginMonitorPhotoChange() {
         try {
-            GlobalStorage.pHelper.registerChange(photoAccessHelper.DefaultChangeUri.DEFAULT_PHOTO_URI, true, this.onPhotoChangedCallback);
+            NCommon.pHelper.registerChange(
+                photoAccessHelper.DefaultChangeUri.DEFAULT_PHOTO_URI,
+                true,
+                this.onPhotoChangedCallback
+            );
         } catch (error) {
             Logger.Error(TAG, `Failed to register photo change monitor: ${error}`);
         }
@@ -27,7 +31,10 @@ class PhotoMonitorImpl {
 
     public stopMonitorPhotoChange() {
         try {
-            GlobalStorage.pHelper.unRegisterChange(photoAccessHelper.DefaultChangeUri.DEFAULT_PHOTO_URI, this.onPhotoChangedCallback);
+            NCommon.pHelper.unRegisterChange(
+                photoAccessHelper.DefaultChangeUri.DEFAULT_PHOTO_URI,
+                this.onPhotoChangedCallback
+            );
         } catch (error) {
             Logger.Error(TAG, `Failed to unregister photo change monitor: ${error}`);
         }
@@ -39,7 +46,7 @@ class PhotoMonitorImpl {
 
         this.fullUploadTimer = setInterval(async () => {
             Logger.Info(TAG, `>>> Scheduled full upload beginning`);
-            await PhotoAssetsManager.doFullUpload();
+            // await PhotoAssetsManager.doFullUpload();
             let nextTime = new Date(Date.now() + PhotoMonitorImpl.FULL_UPLOAD_INTERVAL_MS);
             Logger.Info(TAG, `<<< Scheduled full upload completed, next time: ${nextTime}`);
         }, PhotoMonitorImpl.FULL_UPLOAD_INTERVAL_MS);
@@ -63,13 +70,13 @@ class PhotoMonitorImpl {
 
         this.doUploadTimer = setTimeout(async () => {
             Logger.Info(TAG, `>>> Scheduled photo upload beginning`);
-            await PhotoAssetsManager.doFullUpload();
+            // await PhotoAssetsManager.doFullUpload();
             Logger.Info(TAG, `<<< Scheduled photo upload completed`);
             this.scheduleFullUpload();
         }, PhotoMonitorImpl.UPLOAD_DELAY_MS);
 
         let nextUploadTime = new Date(Date.now() + PhotoMonitorImpl.UPLOAD_DELAY_MS);
-        Notification.publishPendingNotification(nextUploadTime, 66);
+        NotificationManager.publishNotification('nextUploadTime', '', 1);
         Logger.Info(TAG, `+++ Scheduled upload at ${nextUploadTime}`);
     }
 }

@@ -4,7 +4,6 @@ import { Logger } from 'nextcloud';
 import { BUNDLE_NAME } from 'BuildProfile';
 import { BusinessError } from '@ohos.base';
 import { notificationManager } from '@kit.NotificationKit';
-import { PhotoAssetsManager } from './PhotoAssetsManager';
 
 const TAG = "Util-NotificationManager";
 
@@ -15,63 +14,65 @@ class NotificationImpl {
         requestCode: 0,
         wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
     };
-    private readonly BACKGROUND_JOB_TYPE: Array<string> = ["dataTransfer"];
+
     private notificationId: Optional<number> = undefined;
-    private refreshNotificationTimer: number = 0;
+    private idleTimer: number = 0;
 
     public async startNotification(context: Context) {
+        Logger.Info(TAG, `startNotification`);
         try {
             let wantAgentObj = await wantAgent.getWantAgent(this.WANT_AGENT_INFO);
-            let res = await backgroundTaskManager.startBackgroundRunning(context, this.BACKGROUND_JOB_TYPE, wantAgentObj);
-            this.notificationId = res.notificationId;
-            await this.publishIdleNotification();
-            Logger.Info(TAG, `Operation startBackgroundRunning succeeded: ${this.notificationId}`);
+            let req = new backgroundTaskManager.ContinuousTaskRequest();
+            req.backgroundTaskModes = [backgroundTaskManager.BackgroundTaskMode.MODE_TASK_KEEPING];
+            req.backgroundTaskSubmodes = [backgroundTaskManager.BackgroundTaskSubmode.SUBMODE_NORMAL_NOTIFICATION];
+            req.wantAgent = wantAgentObj;
+
+            let res = await backgroundTaskManager.startBackgroundRunning(context, req);
+            Logger.Info(TAG, `${JSON.stringify(res)}`);
+
+
+            this.notificationId = 111;
+            await this.startIdleLoop();
+            Logger.Info(TAG, `startNotification: succeeded: ${this.notificationId}`);
         } catch (error) {
             let e = error as BusinessError;
-            Logger.Error(TAG, `Operation startBackgroundRunning failed. code is ${e.code} message is ${e.message}`);
+            Logger.Error(TAG, `startNotification: failed. code is ${e.code} message is ${e.message}`);
         }
     }
 
-    public async publishUploadProgress(currentNumber: number, totalNumber: number) {
+    public async beginIdle() {
+        Logger.Info(TAG, `startIdle: enter`);
+        if (this.notificationId === undefined) {
+            Logger.Warn(TAG, `startIdle: notificationId is undefined, return directly`);
+            return;
+        }
+        await this.startIdleLoop();
+    }
+
+    public async publishNotification(title: string, content: string, percent: number) {
         if (this.notificationId === undefined) {
             Logger.Warn(TAG, "publishUploadProgress: notificationId is undefined, return directly");
             return;
         }
-        let process = Math.floor((currentNumber / totalNumber) * 100);
-        await this.publishUploadProgressInner('Nextcloud Upload', `Uploading ${currentNumber} of ${totalNumber}`, process);
+
+        clearInterval(this.idleTimer);
+        await this.doPublishNotification(title, content, percent);
     }
 
-    public async publishIdleNotification() {
-        if (this.notificationId === undefined) {
-            Logger.Warn(TAG, "publishIdleUploadNotification: notificationId is undefined, return directly");
-            return;
-        }
+    private async startIdleLoop(): Promise<void> {
+        let doPublishIdleNotificaton = async () => {
+            await this.doPublishNotification('Nexcloud is Idle', `Since ${new Date().toLocaleTimeString()}`, 1);
+        };
 
-        let randomProgress = Math.floor(Math.random() * 100);
-        await this.publishUploadProgressInner('Nextcloud is Idle', `Since ${new Date().toLocaleTimeString()}`, randomProgress);
-
-        clearInterval(this.refreshNotificationTimer);
-        this.refreshNotificationTimer = setInterval(async () => {
-            await this.publishIdleNotification();
-            await PhotoAssetsManager.doFullUpload(false); // false = do not notify again
-        }, 3 * 30 * 1000);
+        await doPublishIdleNotificaton();
+        clearInterval(this.idleTimer);
+        this.idleTimer = setInterval(async () => {
+            await doPublishIdleNotificaton();
+        }, 90 * 1000); ///< 90s
     }
 
-    public async publishPendingNotification(due: Date, percent: number) {
-        if (this.notificationId === undefined) {
-            Logger.Warn(TAG, "publishIdleUploadNotification: notificationId is undefined, return directly");
-            return;
-        }
-        await this.publishUploadProgressInner('Nextcloud Pending Upload', `Scheduled at ${due.toLocaleTimeString()}`, percent);
-    }
-
-    private async publishUploadProgressInner(title: string, subtitle: string, progress: number) {
-        clearInterval(this.refreshNotificationTimer);
-        await this.doPublishUploadProgress(title, subtitle, progress);
-    }
-
-    private async doPublishUploadProgress(title: string, subtitle: string, progress: number) {
-        Logger.Info(TAG, `publishUploadProgress: title='${title}', subtitle='${subtitle}', progress=${progress} to ${this.notificationId}`);
+    private async doPublishNotification(title: string, subtitle: string, progress: number) {
+        Logger.Info(TAG, `doPublishNotification: '${title}', '${subtitle}', ${progress}% -> ${this.notificationId}`);
         let downloadTemplate: notificationManager.NotificationTemplate = {
             name: 'downloadTemplate',
             data: {
@@ -81,22 +82,24 @@ class NotificationImpl {
             }
         };
 
-        let request: notificationManager.NotificationRequest = {
-            content: {
-                notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_SYSTEM_LIVE_VIEW,
-                systemLiveView: { typeCode: 8, title: '<placeholder>', text: '<placeholder>', }
-            },
+        let notificationRequest: notificationManager.NotificationRequest = {
             id: this.notificationId,
-            notificationSlotType: notificationManager.SlotType.LIVE_VIEW,
-            template: downloadTemplate,
+            content: {
+                notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+                normal: {
+                    title: "<placeholder>",
+                    text: "<placeholder>",
+                    additionalText: "<placeholder>",
+                }
+            },
+            template: downloadTemplate
         };
-
         try {
-            await notificationManager.publish(request);
+            await notificationManager.publish(notificationRequest);
         } catch (err) {
-            Logger.Error(TAG, `publish fail: ${JSON.stringify(err)}`);
+            Logger.Error(TAG, `doPublishNotification: publish fail: ${JSON.stringify(err)}`);
         }
     }
 }
 
-export const Notification = new NotificationImpl();
+export const NotificationManager = new NotificationImpl();

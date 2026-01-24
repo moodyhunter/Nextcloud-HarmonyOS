@@ -1,20 +1,28 @@
 import { BasicDataSource } from '../Utils/BasicDatasource';
+import { Logger } from '../Utils/Logger';
+import {
+    ITransferTask,
+    publishTransferEvent,
+    TransferManagerEventCode,
+    TransferType,
+} from './TransferManagerEventIPC';
 
-export enum TransferType {
-    DOWNLOAD,
-    UPLOAD,
-}
+const TAG = 'SyncEngine/TransferManager';
 
-@Observed
+@ObservedV2
 export class TransferTask {
-    public readonly type: TransferType;
-    public readonly filename: string;
-    public totalSize: number = 1;
-    public transferredSize: number = 0;
+    readonly id: number;
+    @Trace public readonly type: TransferType;
+    @Trace public readonly filename: string;
+    @Trace public totalSize: number = 1;
+    @Trace public transferredSize: number = 0;
 
-    constructor(type: TransferType, filename: string) {
-        this.type = type;
-        this.filename = filename;
+    constructor(task: ITransferTask) {
+        this.id = task.id;
+        this.type = task.type;
+        this.filename = task.filename;
+        this.totalSize = task.totalSize;
+        this.transferredSize = task.transferredSize;
     }
 
     public get progressPercentText() {
@@ -25,17 +33,47 @@ export class TransferTask {
     public updateProgress(transferredSize: number, totalSize: number): number {
         if (this.totalSize != totalSize) {
             this.totalSize = totalSize;
+            publishTransferEvent({
+                code: TransferManagerEventCode.TASK_CREATE,
+                taskId: this.id,
+                task: {
+                    id: this.id,
+                    type: this.type,
+                    filename: this.filename,
+                    totalSize: this.totalSize,
+                    transferredSize: this.transferredSize
+                },
+            })
         }
-        this.transferredSize = transferredSize;
+
+        if (transferredSize !== transferredSize) {
+            Logger.Warn(TAG, `transferred size not changed`);
+        } else {
+            this.transferredSize = transferredSize;
+
+            if (this.transferredSize !== this.totalSize) {
+                publishTransferEvent({
+                    code: TransferManagerEventCode.TASK_PROGRESS,
+                    taskId: this.id,
+                    transferredSize: this.transferredSize
+                })
+            } else {
+                publishTransferEvent({
+                    code: TransferManagerEventCode.TASK_COMPLETED,
+                    taskId: this.id,
+                })
+            }
+        }
         return this.transferredSize / this.totalSize;
     }
 }
 
-@Observed
 export class TransferManagerImpl {
     private tasks_: BasicDataSource<TransferTask>;
+    private idSeq_ = 0;
 
     constructor() {
+        Logger.Info(TAG, `created TransferManager`);
         this.tasks_ = new BasicDataSource<TransferTask>();
     }
 
@@ -44,10 +82,10 @@ export class TransferManagerImpl {
     }
 
     public addTransferTask(type: TransferType, fileName: string): TransferTask {
-        let task = new TransferTask(type, fileName);
+        let id = this.idSeq_++;
+        let task = new TransferTask({ id, type, filename: fileName, transferredSize: 0, totalSize: 0 });
         return this.tasks_.prependItem(task);
     }
 }
-
 
 export let TransferManager = new TransferManagerImpl();

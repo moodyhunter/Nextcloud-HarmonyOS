@@ -2,12 +2,16 @@ import { rcp } from '@kit.RemoteCommunicationKit';
 import { NCommon } from '../Common';
 import fs from '@ohos.file.fs';
 import { Logger } from '../Utils/Logger';
-import { TransferManager, TransferType } from '../SyncEngine/TransferManager';
+import { TransferManager } from '../SyncEngine/TransferManager';
 import { Account } from '../Account/Account';
+import { TransferType } from '../SyncEngine/TransferManagerEventIPC';
 
 const TAG = "webdav/Upload";
 
-function CreateSession(account: Account, extraHeaders?: Map<string, string>, eventsHandler?: rcp.HttpEventsHandler): rcp.Session {
+function CreateSession(
+    account: Account,
+    extraHeaders?: Map<string, string>,
+    eventsHandler?: rcp.HttpEventsHandler): rcp.Session {
     let headers: rcp.RequestHeaders = {};
 
     if (extraHeaders !== undefined) {
@@ -37,7 +41,11 @@ function CreateSession(account: Account, extraHeaders?: Map<string, string>, eve
     }
 }
 
-export async function Exists(session: rcp.Session, account: Account, path: string, filename: string = ""): Promise<boolean> {
+export async function Exists(
+    session: rcp.Session,
+    account: Account,
+    path: string,
+    filename: string = ""): Promise<boolean> {
     let fullPath = account.remoteBaseDirUrl() + path + "/" + filename;
     Logger.Info(TAG, "Checking if path exists: " + fullPath);
 
@@ -95,11 +103,20 @@ export async function CreatePath(account: Account, path: string): Promise<number
 }
 
 export async function DownloadFile(account: Account, relativePath: string, localPath: string): Promise<void> {
-    let task = TransferManager.addTransferTask(TransferType.DOWNLOAD, relativePath);
+    let parts = relativePath.split('/');
+    let task = TransferManager.addTransferTask(TransferType.DOWNLOAD, parts[parts.length - 1]);
+
+    let transferredSize = 0;
+    let totalSize = 0;
+
+    let timerId = setInterval(() => {
+        task.updateProgress(transferredSize, totalSize);
+    }, 500);
 
     let eventsHandler: rcp.HttpEventsHandler = {
         onDownloadProgress: (totalBytes: number, transferredBytes: number) => {
-            task.updateProgress(transferredBytes, totalBytes);
+            transferredSize = transferredBytes;
+            totalSize = totalBytes;
         }
     };
 
@@ -110,15 +127,21 @@ export async function DownloadFile(account: Account, relativePath: string, local
     };
 
     await session.downloadToFile(account.remoteBaseDirUrl() + relativePath, downloadToFileOptions).then(() => {
-        task.updateProgress(task.totalSize, task.totalSize);
+        clearInterval(timerId);
+        task.updateProgress(totalSize, totalSize);
     }).catch((error: BusinessError) => {
         Logger.Error(TAG, `Download failed: ${relativePath}, error: ${JSON.stringify(error)}`);
     });
-
+    clearInterval(timerId);
     session.close();
 }
 
-export async function UploadFile(account: Account, filename: string, mTime: number, path: string, uri: string): Promise<number> {
+export async function UploadFile(
+    account: Account,
+    filename: string,
+    mTime: number,
+    path: string,
+    uri: string): Promise<number> {
     let extraHeaders = new Map<string, string>();
     extraHeaders.set('X-OC-MTime', `${Math.round(mTime / 1000)}`);
     let session = CreateSession(account, extraHeaders);

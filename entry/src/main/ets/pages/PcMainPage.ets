@@ -18,6 +18,10 @@ import { PermissionManager } from '../utils/PermissionManager';
 import { LengthMetrics } from '@kit.ArkUI';
 import { DownloadQueue } from '../utils/DownloadQueue';
 import { SettingsPage } from './SettingsPage';
+import { PhotoAssetsManager } from 'nextcloud/src/main/ets/SyncEngine/PhotoAssetsManager';
+import { UploadPage } from './UploadPage';
+import { emitter } from '@kit.BasicServicesKit';
+import { Constants } from '../utils/Common';
 
 const TAG = 'PcAbility'
 const OPERATION_MODES = fileShare.OperationMode.READ_MODE | fileShare.OperationMode.WRITE_MODE;
@@ -53,7 +57,9 @@ struct SyncConfigurationRow {
 
     build() {
         Row({ space: 8 }) {
-            Text(`${this.configuration.id} : ${this.configuration.localFolder.localPath} <=> ${this.configuration.remoteFolder.remotePath}`)
+            Text(
+                `${this.configuration.id} : ${this.configuration.localFolder.localPath} <=> ${this.configuration.remoteFolder.remotePath}`
+            )
 
             Blank()
                 .flexGrow(1)
@@ -99,7 +105,13 @@ struct SyncConfigurationRow {
                 } catch (e) {
                 }
             } else {
-                await DownloadFile(this.account, next.relativePath, this.configuration.localFolder.localPath + '/' + next.relativePath);
+                await DownloadFile(
+                    this.account,
+                    next.relativePath,
+                    this.configuration.localFolder.localPath +
+                    '/' +
+                    next.relativePath
+                );
             }
             Logger.Info(TAG, next.relativePath);
         }
@@ -130,16 +142,20 @@ struct PCAbility {
                         .width('100%')
                 }
 
-                ForEach(Array.from(this.syncFolderManager.allSyncConfigurations), (conf: [number, SyncConfiguration], index: number) => {
-                    ListItem() {
-                        SyncConfigurationRow({
-                            account: this.account,
-                            syncFolderManager: this.syncFolderManager,
-                            configuration: conf[1],
-                        })
-                    }
-                    .clip(true)
-                })
+                ForEach(
+                    Array.from(this.syncFolderManager.allSyncConfigurations),
+                    (
+                        conf: [number, SyncConfiguration],
+                        _index: number) => {
+                        ListItem() {
+                            SyncConfigurationRow({
+                                account: this.account,
+                                syncFolderManager: this.syncFolderManager,
+                                configuration: conf[1],
+                            })
+                        }
+                        .clip(true)
+                    })
             }
             .width('100%')
             .height('100%')
@@ -184,6 +200,8 @@ struct PCAbility {
                                 transferTask: item
                             })
                         }
+                    }, (item: TransferTask, _index: number) => {
+                        return `${item.id}`
                     })
                 }
                 .width('100%')
@@ -216,18 +234,24 @@ struct PCAbility {
     }
 
     async aboutToAppear(): Promise<void> {
-        Logger.Info(TAG, `pcAbility aboutToAppear`);
-        await PermissionManager.RequestPermission(this.getUIContext(), ["ohos.permission.FILE_ACCESS_PERSIST"])
-        for (let syncConfiguration of this.syncFolderManager.allSyncConfigurations.values()) {
-            Logger.Info(TAG, `configuration: ${syncConfiguration.id} --- ${syncConfiguration.localFolder.localPath} <=> ${syncConfiguration.remoteFolder.remotePath}`);
-            CloudSyncApi.connect(syncConfiguration.localFolder.localPath);
+        Logger.Info(TAG, `aboutToAppear`);
+        await PermissionManager.RequestPermission(this.getUIContext(), [
+            'ohos.permission.FILE_ACCESS_PERSIST',
+            'ohos.permission.READ_IMAGEVIDEO',
+            'ohos.permission.MEDIA_LOCATION',
+        ]);
+
+        PhotoAssetsManager.initialize(this.syncFolderManager.allLocalFolders);
+        for (let conf of this.syncFolderManager.allSyncConfigurations.values()) {
+            Logger.Info(TAG, `conf: ${conf.id} - ${conf.localFolder.localPath} <=> ${conf.remoteFolder.remotePath}`);
+            CloudSyncApi.connect(conf.localFolder.localPath);
 
             try {
                 await fileShare.activatePermission([{
-                    uri: fileUri.getUriFromPath(syncConfiguration.localFolder.localPath),
+                    uri: fileUri.getUriFromPath(conf.localFolder.localPath),
                     operationMode: OPERATION_MODES
                 }]);
-                Logger.Info(TAG, `activate permission done for '${syncConfiguration.localFolder.localPath}'`);
+                Logger.Info(TAG, `activate permission done for '${conf.localFolder.localPath}'`);
             } catch (e) {
                 Logger.Error(TAG, `failed to activate: ${JSON.stringify(e)}`);
             }
@@ -237,6 +261,11 @@ struct PCAbility {
             this.onFileChanged(info)
         });
 
+        emitter.on(Constants.EMITTER_EVENT_NOTIFICATION_ON_IDLE, async () => {
+            for (let i = 0; i < 10; i++) {
+                await ListFiles(this.account, '/');
+            }
+        });
         this.files = await ListFiles(this.account, '/');
     }
 
@@ -252,6 +281,13 @@ struct PCAbility {
                 this.pathOps()
             }
             .tabBar('Paths')
+
+            TabContent() {
+                UploadPage()
+                    .width('100%')
+                    .height('100%')
+            }
+            .tabBar('Upload')
 
             TabContent() {
                 this.pcMainPage()
@@ -296,7 +332,13 @@ struct PCAbility {
         let localPathAlias = 'LocalPathAlias_' + Date.now();
         let localFolder = await this.syncFolderManager.addLocalFolder(path, localPathAlias);
         Logger.Info(TAG, `added local folder: ${JSON.stringify(localFolder)}`);
-        let remoteFolder = await this.syncFolderManager.addRemoteFolder(this.account, '/', 'RemotePathAlias_' + Date.now());
+        let remoteFolder =
+            await this.syncFolderManager.addRemoteFolder(
+                this.account,
+                '/',
+                'RemotePathAlias_' +
+                Date.now()
+            );
         Logger.Info(TAG, `added remote folder: ${JSON.stringify(remoteFolder)}`);
         let syncConfig = await this.syncFolderManager.addSyncConfiguration(localFolder, remoteFolder);
         Logger.Info(TAG, `added sync configuration: ${JSON.stringify(syncConfig)}`);

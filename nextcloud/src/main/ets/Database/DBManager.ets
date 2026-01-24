@@ -58,7 +58,12 @@ export class DBManager {
             columnsDef.push(colDef);
             if (colDesc.foreignKey) {
                 let fk = colDesc.foreignKey;
-                let fkTargetColumn: string = Object.keys(fk.target.columns).find(key => fk.target.columns[key] === fk.targetColumn)!;
+                let fkTargetColumn: string =
+                    Object.keys(fk.target.columns)
+                        .find(
+                            key => fk.target.columns[key] ===
+                                fk.targetColumn
+                        )!;
                 foreignKeyDefs.push(`FOREIGN KEY(${colName}) REFERENCES ${fk.target.tableName}(${fkTargetColumn})`);
             }
         }
@@ -109,7 +114,10 @@ export class DBManager {
                     let createSql = DBManager.generateTableCreationScript(tableDesc.tableName, tableDesc.columns);
                     Logger.Info(TAG, `upgradeDatabase: creating table with sql: ${createSql}`);
                     let result = await transaction.execute(createSql);
-                    Logger.Info(TAG, `upgradeDatabase: created table ${tableDesc.tableName}, result: ${JSON.stringify(result)}`);
+                    Logger.Info(
+                        TAG,
+                        `upgradeDatabase: created table ${tableDesc.tableName}, result: ${JSON.stringify(result)}`
+                    );
                 }
                 await transaction.execute('PRAGMA user_version = 1');
                 storeVersion = 1;
@@ -177,11 +185,16 @@ export class DBManager {
             Logger.Error(TAG, `getObjects: failed to read result set: ${JSON.stringify(error)}`);
         }
 
-        Logger.Info(TAG, `getObjects: completed, found ${result.length} accounts`);
+        Logger.Info(TAG, `getObjects: completed, found ${result.length} items`);
         return result;
     }
 
-    async getItemById<T extends DBItem>(id: number, column: ColumnDescriptor, factory: DBTableDescriptor<string, T>): Promise<T | null> {
+    async getItemById<T extends DBItem>(
+        id: number,
+        column: ColumnDescriptor,
+        factory: DBTableDescriptor<string, T>
+    ): Promise<T
+        | null> {
         Logger.Info(TAG, 'getItemById: enter');
         if (!this.store) {
             Logger.Error(TAG, `getItemById: store is undefined`);
@@ -226,9 +239,15 @@ export class DBManager {
 
         try {
             let deletedCount = await this.store.delete(predicate);
-            Logger.Info(TAG, `deleteItemById: completed, deleted ${deletedCount} rows from table ${object.getTableName()}`);
+            Logger.Info(
+                TAG,
+                `deleteItemById: completed, deleted ${deletedCount} rows from table ${object.getTableName()}`
+            );
         } catch (error) {
-            Logger.Error(TAG, `deleteItemById: failed to delete from table ${object.getTableName()}: ${JSON.stringify(error)}`);
+            Logger.Error(
+                TAG,
+                `deleteItemById: failed to delete from table ${object.getTableName()}: ${JSON.stringify(error)}`
+            );
         }
 
     }
@@ -293,9 +312,10 @@ export class DBManager {
         try {
             let rowId = await this.store.insert(object.getTableName(), bucket);
             Logger.Info(TAG, `doStoreItem: completed, rowId: ${rowId}`);
+            this.store.commit();
             return rowId;
         } catch (error) {
-            Logger.Error(TAG, `doStoreItem: failed to insert to table ${object.getTableName()}: ${JSON.stringify(error)}`);
+            Logger.Error(TAG, `doStoreItem: failed to insert to ${object.getTableName()}: ${JSON.stringify(error)}`);
             return;
         }
     }

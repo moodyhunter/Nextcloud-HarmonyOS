@@ -1,8 +1,8 @@
 import { Logger, NCommon } from 'nextcloud';
-import { Category } from '../models/Category';
+import { Category } from 'nextcloud/src/main/ets/SyncEngine/Category';
 import { LengthMetrics } from '@kit.ArkUI';
-import { PhotoItem, UploadStatus } from '../models/PhotoItem';
-import { PhotoAssetsManager } from '../utils/PhotoAssetsManager';
+import { PhotoItem, UploadStatus } from 'nextcloud/src/main/ets/SyncEngine/PhotoItem';
+import { PhotoAssetsManager } from 'nextcloud';
 
 const TAG = "Page-UploadPage"
 
@@ -48,7 +48,7 @@ struct PhotoView {
         .borderWidth(3)
         .borderColor(this.getUploadColor(this.asset.uploadStatus))
         .onClick(async () => {
-            await this.asset.upload(NCommon.Preference.baseUploadDirectory + this.category.location);
+            // await this.asset.upload(NCommon.Preference.baseUploadDirectory + this.category.location);
         })
         .onAppear(async () => {
             if (this.thumbnail === null) {
@@ -73,7 +73,7 @@ struct PhotosGridView {
                     .width('100%')
                     .onAppear(() => {
                         if (index == this.category.visibleItems.totalCount() - 1) {
-                            this.category.showNext50();
+                            this.category.loadNextBatch();
                         }
                     })
                 })
@@ -92,7 +92,7 @@ struct PhotosGridView {
                 Button($r('app.string.upload_all'))
                     .onClick(() => {
                         Logger.Info(TAG, `Upload all in '${this.category.name}'`);
-                        this.category.uploadAllAssets();
+                        // this.category.uploadAllAssets();
                     })
                     .width('30%')
             }
@@ -104,39 +104,39 @@ struct PhotosGridView {
 
 
 @Preview
-@Component
+@ComponentV2
 export struct UploadPage {
-    @State private categories: Category[] = PhotoAssetsManager.categories;
+    @Local private categories: Map<number, Category> = PhotoAssetsManager.categories;
 
     build() {
         Tabs() {
-            ForEach(this.categories, (category: Category) => {
+            ForEach(Array.from(this.categories), (category: [number, Category]) => {
                 TabContent() {
                     Flex({ direction: FlexDirection.Column, space: { main: LengthMetrics.px(20) } }) {
-                        Flex({ direction: FlexDirection.Row, justifyContent: FlexAlign.SpaceBetween, alignItems: ItemAlign.Baseline }) {
-                            Text(category.name)
+                        Flex({
+                            direction: FlexDirection.Row,
+                            justifyContent: FlexAlign.SpaceBetween,
+                            alignItems: ItemAlign.Baseline,
+                        }) {
+                            Text(category[1].name)
                                 .fontWeight(FontWeight.Bold)
                                 .fontSize(24)
 
-                            Text(category.location)
+                            Text('category.location')
                         }
                         .height(32)
 
-                        ForEach(category.patterns, (pattern: string) => {
-                            Text(pattern)
-                                .fontSize(12)
-                                .fontColor(Color.Green)
-                                .fontFamily('serif')
-                        })
-
-                        PhotosGridView({ category: category })
+                        PhotosGridView({ category: category[1] })
                     }
                     .width('100%')
                     .height('100%')
                 }
                 .margin(10)
-                .tabBar(category.name)
+                .tabBar(category[1].name)
             })
         }
+        .vertical(true)
+        .barWidth(100)
+        .barMode(BarMode.Scrollable)
     }
 }

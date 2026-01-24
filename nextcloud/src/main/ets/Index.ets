@@ -2,7 +2,7 @@
  * Nextcloud module entry point
  */
 
-export { NCommon, DEFAULT_CATEGORIES } from './Common';
+export { NCommon } from './Common';
 
 export { ListFiles } from './webdav/Files';
 
@@ -20,7 +20,13 @@ export { SyncConfiguration } from './Database/Types/SyncConfiguration';
 
 export { SyncFolderManager } from './SyncEngine/SyncFolderManager';
 
-export { TransferManager, TransferManagerImpl, TransferTask, TransferType } from './SyncEngine/TransferManager';
+export {
+    TransferManager,
+    TransferManagerImpl,
+    TransferTask,
+} from './SyncEngine/TransferManager';
+
+export { PhotoAssetsManager } from './SyncEngine/PhotoAssetsManager';
 
 export { CreatePath, UploadFile, DownloadFile } from './webdav/Uploader';
 

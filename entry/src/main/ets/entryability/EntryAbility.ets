@@ -1,9 +1,9 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { AsyncSleep, InitialiseNextcloud, Logger } from 'nextcloud';
+import { AsyncSleep, InitialiseNextcloud, Logger, NCommon } from 'nextcloud';
 import { Constants, FolderViewMode } from '../utils/Common';
 import { GlobalStorage } from '../utils/GlobalStorage';
-import { Notification } from '../utils/NotificationManager';
+import { NotificationManager } from '../utils/NotificationManager';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { statusBarManager } from '@kit.DeskTopExtensionKit';
@@ -12,6 +12,12 @@ const TAG = 'EntryAbility';
 
 export default class EntryAbility extends UIAbility {
     private initCompleted: boolean = false;
+    private readonly isPc: boolean;
+
+    constructor() {
+        super();
+        this.isPc = deviceInfo.deviceType === deviceInfo.DeviceTypes.TYPE_2IN1;
+    }
 
     async onCreate(_want: Want, _launchParam: AbilityConstant.LaunchParam) {
         Logger.Info(TAG, 'Ability onCreate');
@@ -28,25 +34,25 @@ export default class EntryAbility extends UIAbility {
         Logger.Info(TAG, 'Ability onDestroy');
     }
 
-    async onWindowStageCreate(windowStage: window.WindowStage) {
+    private async ensureInitCompleted() {
         while (!this.initCompleted) {
             Logger.Info(TAG, 'Waiting for initialization to complete...');
             await AsyncSleep(100);
         }
         Logger.Info(TAG, 'Initialization completed, proceeding to create main window.');
+    }
 
+    async onWindowStageCreate(windowStage: window.WindowStage) {
+        await this.ensureInitCompleted();
         let context = this.context;
         GlobalStorage.SandboxBasePath = context.filesDir;
 
         try {
-            let isPc = deviceInfo.deviceType === deviceInfo.DeviceTypes.TYPE_2IN1;
-            let page = isPc ? 'pages/PcMainPage' : 'pages/Index';
-            if (!isPc) {
-                GlobalStorage.pHelper = photoAccessHelper.getPhotoAccessHelper(this.context);
-                await Notification.startNotification(this.context);
-            }
+            let page = this.isPc ? 'pages/PcMainPage' : 'pages/Index';
+            await NotificationManager.startNotification(this.context);
+            NCommon.pHelper = photoAccessHelper.getPhotoAccessHelper(this.context);
             await windowStage.loadContent(page);
-            if (isPc) {
+            if (this.isPc) {
                 this.createTrayIcon();
             } else {
                 PersistentStorage.persistProp(Constants.VIEW_MODE_KEY, FolderViewMode.TwoColumns);
@@ -65,8 +71,12 @@ export default class EntryAbility extends UIAbility {
      * @throws
      */
     async onPrepareToTerminateAsync(): Promise<boolean> {
-        await this.context.hideAbility();
-        return true;
+        if (this.isPc) {
+            await this.context.hideAbility();
+            return true;
+        } else {
+            return false;
+        }
     }
 
     onWindowStageDestroy() {
