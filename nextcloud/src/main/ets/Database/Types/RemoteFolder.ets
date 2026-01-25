@@ -10,6 +10,10 @@ export class RemoteFolder {
         this.account_ = account;
     }
 
+    public get name() {
+        return this.dbRemoteFolder_.alias;
+    }
+
     public get id(): number {
         return this.dbRemoteFolder_.id;
     }

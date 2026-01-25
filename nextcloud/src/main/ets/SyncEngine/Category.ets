@@ -20,10 +20,9 @@ export enum AddPosition {
 
 const BATCH_SIZE = 150;
 
-@ObservedV2
 export class Category {
     visibleItems: ImageListDataSource = new ImageListDataSource();
-    private localFolder: LocalFolder;
+    localFolder: LocalFolder;
 
     constructor(localFolder: LocalFolder) {
         if (localFolder.folderType !== LocalFolderType.PhotoAlbum) {
@@ -35,6 +34,10 @@ export class Category {
 
     public get name() {
         return this.localFolder.alias;
+    }
+
+    public get instantUploadEnabled() {
+        return this.localFolder.dbLocalFolder.config.instantUploadEnabled;
     }
 
     public setAlias(newAlias: string) {

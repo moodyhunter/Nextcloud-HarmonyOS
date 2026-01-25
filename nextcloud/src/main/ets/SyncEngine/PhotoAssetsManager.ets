@@ -31,6 +31,10 @@ class PhotoAssetsManagerImpl {
     ];
     @Trace public categories: Map<number, Category> = new Map();
 
+    /**
+     * @throws
+     * @returns
+     */
     public async loadNextBatchFromAlbumId(albumId: number, offset: number, limit: number): Promise<PhotoItem[]> {
         const FETCH_OPTIONS: photoAccessHelper.FetchOptions = {
             fetchColumns: PhotoAssetsManagerImpl.FETCH_COLUMNS,
@@ -42,7 +46,7 @@ class PhotoAssetsManagerImpl {
 
         let result = await NCommon.pHelper.getAssets(FETCH_OPTIONS);
         let assets = await result.getAllObjects();
-        Logger.Info(TAG, `loadNextBatchFromAlbumId:` +
+        Logger.Debug(TAG, `loadNextBatchFromAlbumId:` +
             `albumId: ${albumId}`,
             `offset: ${offset}`,
             `limit: ${limit} -> ${assets.length} assets`
@@ -56,7 +60,6 @@ class PhotoAssetsManagerImpl {
 
     public async initialize(categories: Map<number, LocalFolder>) {
         for (let item of categories) {
-            Logger.Debug(TAG, `existing id: ${item[1].albumId}`)
             let localFolder = item[1];
             if (localFolder.folderType === LocalFolderType.PhotoAlbum) {
                 this.categories.set(localFolder.albumId, new Category(localFolder));
@@ -67,9 +70,9 @@ class PhotoAssetsManagerImpl {
         const albums = await this.getAllCategories();
         for (let albumId of albums) {
             if (!this.categories.has(albumId)) {
-                Logger.Warn(TAG, `found new AlbumId: ${albumId}`);
+                Logger.Warn(TAG, `initialize: found new AlbumId: ${albumId}`);
                 let localFolder = await sfm.addLocalAlbumFolder(albumId, `Album ${albumId}`);
-                this.categories.set(localFolder.id, new Category(localFolder));
+                this.categories.set(localFolder.albumId, new Category(localFolder));
             }
         }
     }
@@ -136,6 +139,12 @@ class PhotoAssetsManagerImpl {
         let category = this.categories.get(ownerAlbumId);
         if (category) {
             category.tryAddAsset(photoItem, addPosition);
+
+            let account = Nextcloud.getAllAccounts()[0];
+            let remoteFolderId = account.dbAccount.config.instantUploadFolderId;
+            let remoteFolder = await Nextcloud.getSyncFolderManager().getRemoteFolderById(remoteFolderId);
+            Logger.Info(TAG, `instant upload remote dir: ${remoteFolderId}`);
+            photoItem.getUploadJob(category.name, remoteFolder!).start();
         } else {
             Logger.Error(TAG, `add new category for ${ownerAlbumId} failed`);
         }

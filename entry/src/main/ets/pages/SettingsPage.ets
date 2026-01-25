@@ -124,7 +124,9 @@ export struct SettingsPage {
                     }
                 })
         }
+        .background($r('sys.color.background_primary'))
         .height('100%')
+        .padding({ bottom: 16 })
     }
 
     private doLoadSettings() {

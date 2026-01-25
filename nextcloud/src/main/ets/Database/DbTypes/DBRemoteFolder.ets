@@ -24,6 +24,10 @@ export class DBRemoteFolder implements DBItem {
         return DBRemoteFolder.DB_TABLE_NAME;
     }
 
+    getTableDescription(): DBTableDescriptor<string, DBItem> {
+        return DBRemoteFolderTable;
+    }
+
     public toBucket(isCreate: boolean): relationalStore.ValuesBucket {
         let bucket: relationalStore.ValuesBucket = {};
         if (isCreate === false) {
@@ -53,6 +57,7 @@ export const DBRemoteFolderTable: DBTableDescriptor<DBRemoteFolderColumnNames, D
         },
         'alias': { type: 'TEXT', attrs: 'NOT NULL' },
     },
+    primaryKey: 'folder_id',
     createItemFromBucket(bucket: relationalStore.ValuesBucket): DBRemoteFolder {
         let id = bucket['folder_id'] as number;
         let remotePath = bucket['remote_path'] as string;

@@ -7,7 +7,7 @@ import { Logger } from './Utils/Logger';
 import { DBManager } from './Database/DBManager';
 import { NCommon } from './Common';
 import { Account } from './Account/Account';
-import { DBAccount, DBAccountTableInfo } from './Database/DbTypes/DBAccount';
+import { DBAccountTableInfo } from './Database/DbTypes/DBAccount';
 
 const TAG = 'Nextcloud/Init';
 
@@ -70,6 +70,10 @@ export class NextcloudImpl {
         }
     }
 
+    public async updateAccount(account: Account) {
+        await this.dbManager_.updateItem(account.dbAccount);
+    }
+
     public async recreateDatabase() {
         await this.dbManager_.dropDatabase();
     }
@@ -96,8 +100,8 @@ export class NextcloudImpl {
         let prefPassword = NCommon.Preference.getPref('login.appPassword', '');
         if (prefServer.length > 0 && prefUsername.length > 0 && prefPassword.length > 0) {
             Logger.Info(TAG, `migrateAccount: no accounts found, migrate default account '${prefUsername}@${prefServer}' from preferences`);
-            let dbAccount = new DBAccount(0, prefServer, prefUsername, prefPassword);
-            await this.addAccount(new Account(dbAccount));
+            let account = Account.createNewAccount(prefServer, prefUsername, prefPassword);
+            await this.addAccount(account);
         } else {
             Logger.Info(TAG, `migrateAccount: no accounts found, possibly first run`);
         }

@@ -1,30 +1,30 @@
 import { photoAccessHelper as PHelper } from '@kit.MediaLibraryKit';
-import { CreatePath, JobManager, Logger, Nextcloud, SyncConfiguration } from '../Index';
-import { promptAction } from '@kit.ArkUI';
+import { JobManager } from '../Index';
 import { image } from '@kit.ImageKit';
 import { FormatTime } from '../Utils/CommonUtils';
+import { RemoteFolder } from '../Database/Types/RemoteFolder';
+import { BaseJob, JobState } from './Jobs/BaseJob';
+import { UploadTransferJob } from './Jobs/UploadTransferJob';
+import { Logger } from '../Utils/Logger';
 
 const TAG = 'PhotoItem';
 const DEFAULT_FORMAT = 'yyyy/MM/';
 
 export enum UploadStatus {
-    None,
-    Uploading,
-    Uploaded,
-    Failed,
-    Existed,
-}
-
-export enum UploadResult {
-    FAILED,
-    EXISTED,
-    SUCCEEDED,
+    None, // not yet started
+    Pending, // scheduled, not yet transmitted
+    Uploading, // transmitting
+    Existed, // existed
+    Completed, // upload completed
+    Failed, // upload failed
+    FailedCreatingPath, // failed to create one or more parent path
 }
 
 @ObservedV2
 export class PhotoItem {
     @Trace uploadStatus: UploadStatus = UploadStatus.None;
     private innerAsset: PHelper.PhotoAsset;
+    private uploadJob: Optional<UploadTransferJob> = undefined;
 
     constructor(asset: PHelper.PhotoAsset) {
         this.innerAsset = asset;
@@ -70,54 +70,41 @@ export class PhotoItem {
         return await this.innerAsset.getThumbnail(size);
     }
 
-    async upload(basePath: string): Promise<UploadResult> {
-        const configuration = Nextcloud.getSyncFolderManager().allSyncConfigurations.values();
-        let realConfiguration = configuration.next().value as SyncConfiguration;
-
-        this.uploadStatus = UploadStatus.Uploading;
-        const path = basePath + FormatTime(this.dateTaken, DEFAULT_FORMAT);
-        let mkdirResult = await CreatePath(realConfiguration.remoteFolder.account, path);
-        if (mkdirResult !== 201 && mkdirResult !== 409 && mkdirResult !== 405) {
-            // 405 is the status code for "already exists"
-            Logger.Error(TAG, `Failed to create path: ${path}`);
-            promptAction.showToast({
-                message: `Failed to create path: ${path}: ${mkdirResult}`,
-                duration: 2000,
-            });
+    public getUploadJob(categoryName: string, remoteFolder: RemoteFolder): UploadTransferJob {
+        Logger.Info(TAG, `getUploadJob: enter`);
+        if (this.uploadJob) {
+            return this.uploadJob;
         }
 
-        let ret: UploadResult = UploadResult.FAILED;
-
-        let job = JobManager.createUploadJob({
+        this.uploadJob = JobManager.createUploadJob({
             fileName: this.displayName,
             mTime: this.dateTakenMs,
             uri: this.uri,
-            localFolder: realConfiguration.localFolder,
-            remoteFolder: realConfiguration.remoteFolder,
-            relativePath: path + '/' + this.displayName,
+            remoteFolder: remoteFolder,
+            relativePath: categoryName + '/' + FormatTime(this.dateTaken, DEFAULT_FORMAT) + '/',
         });
-        await job.start();
 
-        let message = "";
-        let uploadResult = job.statusCode;
-        if (uploadResult !== 201 && uploadResult !== 204) {
-            message = `Failed: ${this.displayName}: ${uploadResult}`;
-            this.uploadStatus = UploadStatus.Failed;
-            ret = UploadResult.FAILED;
-        } else if (uploadResult === 204) {
-            message = `File Existed: ${this.displayName}`;
-            this.uploadStatus = UploadStatus.Existed;
-            ret = UploadResult.EXISTED;
-        } else {
-            message = `Uploaded: ${this.displayName}`;
-            this.uploadStatus = UploadStatus.Uploaded;
-            ret = UploadResult.SUCCEEDED;
-        }
-
-        Logger.Info(TAG, `upload result: "${message}"`);
-        if (ret !== UploadResult.EXISTED) {
-            promptAction.showToast({ message, duration: 2000 });
-        }
-        return ret;
+        this.uploadJob.addStateListener((baseJob: BaseJob, state: JobState) => {
+            switch (state) {
+                case JobState.PENDING:
+                    this.uploadStatus = UploadStatus.Pending;
+                    break;
+                case JobState.IN_PROGRESS:
+                    this.uploadStatus = UploadStatus.Uploading;
+                    break;
+                case JobState.COMPLETED:
+                case JobState.FAILED: {
+                    let uploadJob = baseJob as UploadTransferJob;
+                    if (uploadJob.statusCode === 201) {
+                        this.uploadStatus = UploadStatus.Completed;
+                    } else if (uploadJob.statusCode === 204) {
+                        this.uploadStatus = UploadStatus.Existed;
+                    } else {
+                        this.uploadStatus = UploadStatus.Failed;
+                    }
+                }
+            }
+        });
+        return this.uploadJob;
     }
 }

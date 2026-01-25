@@ -1,14 +1,14 @@
 import { relationalStore } from '@kit.ArkData';
 import { Logger } from '../Utils/Logger';
 import { DBAccountTableInfo } from './DbTypes/DBAccount';
-import { DBLocalSyncFolderTable } from './DbTypes/DBLocalFolder';
+import { DBLocalFolderTable } from './DbTypes/DBLocalFolder';
 import { DBRemoteFolderTable } from './DbTypes/DBRemoteFolder';
 import { DEBUG } from '../../../../BuildProfile';
 import { DBSyncConfigurationTable } from './DbTypes/DBSyncConfiguration';
 
 const TAG = 'Database/DBManager';
 
-const CAN_RECREATE_DATABASE = true;
+const CAN_RECREATE_DATABASE = false;
 
 interface ForeignKeyDescriptor {
     target: DBTableDescriptor<string, DBItem>;
@@ -25,6 +25,7 @@ export interface DBTableDescriptor<TColumnName extends string, TItem> {
     readonly tableName: string,
     readonly columns: Record<TColumnName, ColumnDescriptor>;
     readonly createItemFromBucket: (bucket: relationalStore.ValuesBucket) => TItem;
+    readonly primaryKey: TColumnName;
 }
 
 /**
@@ -33,13 +34,15 @@ export interface DBTableDescriptor<TColumnName extends string, TItem> {
 export interface DBItem {
     getTableName(): string;
 
+    getTableDescription(): DBTableDescriptor<string, DBItem>;
+
     toBucket(isCreate: boolean): relationalStore.ValuesBucket;
 }
 
 const TABLES: DBTableDescriptor<string, DBItem>[] = [
     DBAccountTableInfo,
     DBRemoteFolderTable,
-    DBLocalSyncFolderTable,
+    DBLocalFolderTable,
     DBSyncConfigurationTable,
 ];
 
@@ -62,7 +65,7 @@ export class DBManager {
                     Object.keys(fk.target.columns)
                         .find(
                             key => fk.target.columns[key] ===
-                                fk.targetColumn
+                            fk.targetColumn
                         )!;
                 foreignKeyDefs.push(`FOREIGN KEY(${colName}) REFERENCES ${fk.target.tableName}(${fkTargetColumn})`);
             }
@@ -189,11 +192,7 @@ export class DBManager {
         return result;
     }
 
-    async getItemById<T extends DBItem>(
-        id: number,
-        column: ColumnDescriptor,
-        factory: DBTableDescriptor<string, T>
-    ): Promise<T
+    async getItemById<T extends DBItem>(id: number, table: DBTableDescriptor<string, T>): Promise<T
         | null> {
         Logger.Info(TAG, 'getItemById: enter');
         if (!this.store) {
@@ -201,8 +200,8 @@ export class DBManager {
             return null;
         }
 
-        let predicate = new relationalStore.RdbPredicates(factory.tableName);
-        predicate.equalTo(Object.keys(factory.columns).find(key => factory.columns[key] === column)!, id);
+        let predicate = new relationalStore.RdbPredicates(table.tableName);
+        predicate.equalTo(table.primaryKey, id);
 
         try {
             let resultSet = await this.store.query(predicate);
@@ -212,7 +211,7 @@ export class DBManager {
             }
             if (resultSet.goToNextRow()) {
                 let bucket = resultSet.getRow();
-                let item = factory.createItemFromBucket(bucket);
+                let item = table.createItemFromBucket(bucket);
                 Logger.Info(TAG, `getItemById: completed, found item with id=${id}`);
                 return item;
             }
@@ -310,7 +309,15 @@ export class DBManager {
 
         let bucket = object.toBucket(isCreate);
         try {
-            let rowId = await this.store.insert(object.getTableName(), bucket);
+            let rowId: number;
+            if (isCreate) {
+                rowId = await this.store.insert(object.getTableName(), bucket);
+            } else {
+                let pred = new relationalStore.RdbPredicates(object.getTableName());
+                const primaryKey = object.getTableDescription().primaryKey;
+                pred.equalTo(primaryKey, bucket[primaryKey]);
+                rowId = await this.store.update(bucket, pred);
+            }
             Logger.Info(TAG, `doStoreItem: completed, rowId: ${rowId}`);
             this.store.commit();
             return rowId;

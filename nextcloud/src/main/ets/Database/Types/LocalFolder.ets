@@ -1,16 +1,20 @@
-import { DBLocalSyncFolder, LocalFolderType } from '../DbTypes/DBLocalFolder';
+import { DBLocalFolder, LocalFolderType } from '../DbTypes/DBLocalFolder';
 
 export interface LocalFolderItem {}
 
 export class LocalFolder {
-    private dbLocalFolder_: DBLocalSyncFolder;
+    private dbLocalFolder_: DBLocalFolder;
 
-    constructor(dbLocalFolder: DBLocalSyncFolder) {
+    constructor(dbLocalFolder: DBLocalFolder) {
         this.dbLocalFolder_ = dbLocalFolder;
     }
 
     public get id(): number {
         return this.dbLocalFolder_.id;
+    }
+
+    public get dbLocalFolder() {
+        return this.dbLocalFolder_;
     }
 
     public get folderType(): LocalFolderType {

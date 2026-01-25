@@ -4,7 +4,7 @@ import { DBManager } from '../Database/DBManager';
 import { DBSyncConfiguration, DBSyncConfigurationTable } from '../Database/DbTypes/DBSyncConfiguration';
 import { LocalFolder } from '../Database/Types/LocalFolder';
 import { RemoteFolder } from '../Database/Types/RemoteFolder';
-import { DBLocalSyncFolder, DBLocalSyncFolderTable, LocalFolderType } from '../Database/DbTypes/DBLocalFolder';
+import { DBLocalFolder, DBLocalFolderConfig, DBLocalFolderTable, LocalFolderType } from '../Database/DbTypes/DBLocalFolder';
 import { DBRemoteFolder, DBRemoteFolderTable } from '../Database/DbTypes/DBRemoteFolder';
 import { Account } from '../Account/Account';
 import { SyncConfiguration } from '../Database/Types/SyncConfiguration';
@@ -41,19 +41,25 @@ export class SyncFolderManager {
     }
 
     public async addLocalAlbumFolder(albumId: number, alias: string): Promise<LocalFolder> {
-        Logger.Info(TAG, `addLocalFolder: enter`);
-        let dbLocalFolder = new DBLocalSyncFolder(0, albumId.toString(), alias, LocalFolderType.PhotoAlbum);
+        Logger.Info(TAG, `addLocalAlbumFolder: enter`);
+        let config: DBLocalFolderConfig = {
+            instantUploadEnabled: false
+        };
+        let dbLocalFolder = new DBLocalFolder(0, albumId.toString(), alias, LocalFolderType.PhotoAlbum, config);
         let localFolder = new LocalFolder(dbLocalFolder);
         let insertedId = await this.dbManager_.createItem(dbLocalFolder);
         dbLocalFolder.id = insertedId!;
         this.localFolders_.set(dbLocalFolder.id, localFolder);
-        Logger.Info(TAG, `addLocalFolder: added local folder id ${dbLocalFolder.id} with albumId ${albumId}`);
+        Logger.Info(TAG, `addLocalAlbumFolder: added local folder id ${dbLocalFolder.id} with albumId ${albumId}`);
         return localFolder;
     }
 
     public async addLocalFolder(localPath: string, alias: string): Promise<LocalFolder> {
         Logger.Info(TAG, `addLocalFolder: enter`);
-        let dbLocalFolder = new DBLocalSyncFolder(0, localPath, alias, LocalFolderType.Regular);
+        let config: DBLocalFolderConfig = {
+            instantUploadEnabled: false
+        };
+        let dbLocalFolder = new DBLocalFolder(0, localPath, alias, LocalFolderType.Regular, config);
         let localFolder = new LocalFolder(dbLocalFolder);
         let insertedId = await this.dbManager_.createItem(dbLocalFolder);
         dbLocalFolder.id = insertedId!;
@@ -100,7 +106,7 @@ export class SyncFolderManager {
 
     public async loadSyncFolders(): Promise<void> {
         Logger.Info(TAG, `loadSyncFolders: enter`);
-        let localFolders = await this.dbManager_.getItems(DBLocalSyncFolderTable);
+        let localFolders = await this.dbManager_.getItems(DBLocalFolderTable);
         for (let localFolder of localFolders) {
             this.localFolders_.set(localFolder.id, new LocalFolder(localFolder));
         }
@@ -133,37 +139,13 @@ export class SyncFolderManager {
         Logger.Info(TAG, `loadSyncFolders: loaded total ${this.configurations_.size} sync configurations`);
     }
 
-    private async getLocalFolderById(id: number): Promise<LocalFolder | null> {
-        let existing = this.localFolders_.get(id);
-        if (existing) {
-            return existing;
-        }
-
-        let dbLocalFolder =
-            await this.dbManager_.getItemById(id, DBLocalSyncFolderTable.columns.folder_id, DBLocalSyncFolderTable);
-        if (!dbLocalFolder) {
-            Logger.Error(TAG, `getLocalFolderById: local folder id ${id} not found`);
-            return null;
-        }
-
-        Logger.Info(TAG, `getLocalFolderById: ${dbLocalFolder.id}`);
-        existing = new LocalFolder(dbLocalFolder);
-        this.localFolders_.set(id, existing);
-        return existing;
-    }
-
-    private async getRemoteFolderById(id: number): Promise<RemoteFolder | null> {
+    public async getRemoteFolderById(id: number): Promise<RemoteFolder | null> {
         let existing = this.remoteFolders_.get(id);
         if (existing) {
             return existing;
         }
 
-        let dbRemoteFolder =
-            await this.dbManager_.getItemById(
-                id,
-                DBRemoteFolderTable.columns.folder_id,
-                DBRemoteFolderTable
-            );
+        let dbRemoteFolder = await this.dbManager_.getItemById(id, DBRemoteFolderTable);
         if (!dbRemoteFolder) {
             Logger.Error(TAG, `getRemoteFolderById: remote folder id ${id} not found`);
             return null;
@@ -172,6 +154,31 @@ export class SyncFolderManager {
         let account = Nextcloud.getAccountById(dbRemoteFolder.accountId);
         existing = new RemoteFolder(account, dbRemoteFolder);
         this.remoteFolders_.set(id, existing);
+        return existing;
+    }
+
+    public async updateLocalFolder(localFolder: LocalFolder) {
+        Logger.Info(TAG, `updateLocalFolder enter: id = ${localFolder.id}`);
+        let result = await this.dbManager_.updateItem(localFolder.dbLocalFolder);
+        Logger.Info(TAG, `updateLocalFolder result: ${result}`);
+    }
+
+    private async getLocalFolderById(id: number): Promise<LocalFolder | null> {
+        let existing = this.localFolders_.get(id);
+        if (existing) {
+            return existing;
+        }
+
+        let dbLocalFolder =
+            await this.dbManager_.getItemById(id, DBLocalFolderTable);
+        if (!dbLocalFolder) {
+            Logger.Error(TAG, `getLocalFolderById: local folder id ${id} not found`);
+            return null;
+        }
+
+        Logger.Info(TAG, `getLocalFolderById: ${dbLocalFolder.id}`);
+        existing = new LocalFolder(dbLocalFolder);
+        this.localFolders_.set(id, existing);
         return existing;
     }
 }

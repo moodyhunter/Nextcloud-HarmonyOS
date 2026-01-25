@@ -1,4 +1,3 @@
-import { LocalFolder } from '../../Database/Types/LocalFolder';
 import { RemoteFolder } from '../../Database/Types/RemoteFolder';
 import { Logger } from '../../Utils/Logger';
 import { CreateSession } from '../../webdav/TransferUtils';
@@ -12,21 +11,9 @@ export interface TransferJobData extends JobData {
     fileName: string;
 
     /**
-     * The local folder involved in the transfer
-     */
-    localFolder: LocalFolder;
-
-    /**
      * The remote folder involved in the transfer
      */
     remoteFolder: RemoteFolder;
-
-    /**
-     * The relative path of the file being transferred within the folder structure, which can be used to derive the full paths:
-     * localPath = localFolder.path + relativePath
-     * remotePath = remoteFolder.path + relativePath
-     */
-    relativePath: string;
 }
 
 @ObservedV2
@@ -36,9 +23,7 @@ export class TransferJob extends BaseJob {
     @Trace public readonly filename: string;
     @Trace public totalSize: number = 1;
     @Trace public transferredSize: number = 0;
-    @Trace public localFolder: LocalFolder;
     @Trace public remoteFolder: RemoteFolder;
-    @Trace public relativePath: string;
     @Trace protected historicalBatchesTransferredSize: number = 0;
     private readonly sessionExtraHeaders: Map<string, string> = new Map<string, string>();
 
@@ -47,9 +32,7 @@ export class TransferJob extends BaseJob {
         this.id = id;
         this.type = type;
         this.filename = data.fileName;
-        this.localFolder = data.localFolder;
         this.remoteFolder = data.remoteFolder;
-        this.relativePath = data.relativePath;
         if (extraHeaders) {
             this.sessionExtraHeaders = extraHeaders;
         }
@@ -124,7 +107,6 @@ export class TransferJob extends BaseJob {
     }
 
     protected onUploadProgress(transferredBytes: number) {
-        Logger.Info(this.TAG, `onUploadProgress: transferredBytes=${transferredBytes}`);
         this.transferredSize = this.historicalBatchesTransferredSize + transferredBytes;
     }
 

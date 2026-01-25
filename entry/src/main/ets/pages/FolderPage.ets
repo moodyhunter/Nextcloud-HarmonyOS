@@ -1,20 +1,18 @@
-import { Account, DirectoryEntry, FilesDataSource, Logger, NCommon } from 'nextcloud';
+import { Account, DirectoryEntry, FilesDataSource, Logger } from 'nextcloud';
 import { Path } from '../utils/Path';
 import { PREVIEW_PAGE_NAME, PreviewPageProps } from './PreviewPage';
 import { LengthMetrics } from '@kit.ArkUI';
 import { FormatBytes } from '../utils/Utils';
-import { Constants, FolderViewMode } from '../utils/Common';
 
 const TAG = "Page-FolderPage";
 
 export let FOLDER_PAGE_NAME: string = "FolderPage";
 
-@Component
+@ComponentV2
 export struct FolderPage {
-    @ObjectLink account: Account;
-    @StorageLink(Constants.VIEW_MODE_KEY) viewMode: FolderViewMode = FolderViewMode.TwoColumns;
-    @Consume('FolderList.PathStack') pageInfos: NavPathStack;
-    @Prop currentPath: Path;
+    @Require @Param account: Account;
+    @Require @Param currentPath: Path;
+    @Consumer('FolderList.PathStack') pageInfos: NavPathStack = new NavPathStack();
 
     static formatSubtitle(mime: string, size: string) {
         let mimeParts = mime.split('/');
@@ -134,7 +132,7 @@ export struct FolderPage {
                                         .fontStyle(FontStyle.Italic)
                                 }
                                 .alignItems(HorizontalAlign.Start)
-                                .width(this.viewMode == 1 ? '75%' : '70%')
+                                .width('70%')
                             }
                         }
                         .backgroundColor(Color.Transparent)
@@ -149,7 +147,7 @@ export struct FolderPage {
                 })
             }
             .fadingEdge(true, { fadingEdgeLength: LengthMetrics.vp(80) })
-            .lanes(this.viewMode)
+            .lanes(2)
             .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
             .width('auto')
             .height('auto')

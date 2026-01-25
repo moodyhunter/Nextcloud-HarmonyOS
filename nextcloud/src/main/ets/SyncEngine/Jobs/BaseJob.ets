@@ -9,27 +9,38 @@ export enum JobState {
 
 export interface JobData {}
 
+type JobStateListener = (job: BaseJob, state: JobState) => void;
+
 export class BaseJob {
     public readonly jobName: string;
     protected readonly TAG: string;
     protected state: JobState = JobState.PENDING;
-    private stateListeners: Array<(state: string) => void> = [];
+    private stateListeners: Array<JobStateListener> = [];
+    private stateHistory: JobState[] = [];
 
     constructor(name: string) {
         this.jobName = name;
         this.TAG = `Jobs/${this.jobName}`;
+        this.stateHistory.push(JobState.PENDING);
     }
 
     public get jobState(): string {
         return this.state;
     }
 
-    public addStateListener(listener: (state: string) => void): void {
-        this.stateListeners.push(listener);
+    public addStateListener(listener: JobStateListener): void {
+        this.stateListeners.push(listener as JobStateListener);
+        for (const state of this.stateHistory) {
+            listener(this, state);
+        }
     }
 
-    public removeStateListener(listener: (state: string) => void): void {
-        this.stateListeners = this.stateListeners.filter(l => l !== listener);
+    public removeStateListener(listener?: JobStateListener): void {
+        if (listener === undefined) {
+            this.stateListeners = [];
+        } else {
+            this.stateListeners = this.stateListeners.filter(l => l !== listener);
+        }
     }
 
     public start(): Promise<void> {
@@ -59,6 +70,7 @@ export class BaseJob {
 
     private setState(newState: JobState) {
         this.state = newState;
-        this.stateListeners.forEach(listener => listener(this.state));
+        this.stateHistory.push(newState);
+        this.stateListeners.forEach(listener => listener(this, newState));
     }
 }

@@ -5,7 +5,6 @@ import {
     ListFiles,
     Logger,
     Nextcloud,
-    PhotoAssetsManager,
     SyncConfiguration,
     SyncFolderManager,
     TransferJob
@@ -21,31 +20,10 @@ import { UploadPage } from './UploadPage';
 import { emitter } from '@kit.BasicServicesKit';
 import { Constants } from '../utils/Common';
 import { PhotoMonitor } from '../utils/PhotoMonitor';
+import { TransferProgress } from './TransferProgress';
 
 const TAG = 'PcAbility'
 const OPERATION_MODES = fileShare.OperationMode.READ_MODE | fileShare.OperationMode.WRITE_MODE;
-
-@ComponentV2
-struct TransferProgressItem {
-    @Require @Param job: TransferJob;
-
-    build() {
-        Flex({ direction: FlexDirection.Row, alignItems: ItemAlign.Center, space: { main: LengthMetrics.vp(8) } }) {
-            Text(this.job.filename)
-                .width(180)
-                .textOverflow({ overflow: TextOverflow.MARQUEE })
-                .textAlign(TextAlign.End)
-
-            Progress({
-                value: this.job.transferredSize,
-                total: this.job.totalSize,
-            })
-
-            Text(this.job.progressPercentText)
-                .width(100)
-        }
-    }
-}
 
 @ComponentV2
 struct SyncConfigurationRow {
@@ -194,19 +172,9 @@ struct PCAbility {
             Column({ space: 8 }) {
                 Text('download progress')
 
-                List() {
-                    LazyForEach(JobManager.tasks, (item: TransferJob) => {
-                        ListItem() {
-                            TransferProgressItem({
-                                job: item
-                            })
-                        }
-                    }, (item: TransferJob, _index: number) => {
-                        return `${item.id}`
-                    })
-                }
-                .width('100%')
-                .height(250)
+                TransferProgress()
+                    .width('100%')
+                    .height(250)
             }
 
             Column({ space: 8 }) {
@@ -242,8 +210,6 @@ struct PCAbility {
             'ohos.permission.MEDIA_LOCATION',
         ]);
 
-        PhotoAssetsManager.initialize(this.syncFolderManager.allLocalFolders);
-        PhotoMonitor.beginMonitorPhotoChange();
         for (let conf of this.syncFolderManager.allSyncConfigurations.values()) {
             Logger.Info(TAG, `conf: ${conf.id} - ${conf.localFolder.localPath} <=> ${conf.remoteFolder.remotePath}`);
             CloudSyncApi.connect(conf.localFolder.localPath);
@@ -285,7 +251,7 @@ struct PCAbility {
             .tabBar('Paths')
 
             TabContent() {
-                UploadPage()
+                UploadPage({ account: this.account })
                     .width('100%')
                     .height('100%')
             }

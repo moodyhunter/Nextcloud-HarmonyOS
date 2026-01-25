@@ -1,4 +1,6 @@
-import { DBAccount } from '../Database/DbTypes/DBAccount';
+import { AccountConfig, DBAccount } from '../Database/DbTypes/DBAccount';
+import { RemoteFolder } from '../Database/Types/RemoteFolder';
+import { Nextcloud } from '../Main';
 import { Base64Encode } from '../Utils/CommonUtils';
 import { Logger } from '../Utils/Logger';
 
@@ -30,7 +32,10 @@ export class Account {
 
     public static createNewAccount(hostname: string, username: string, password: string): Account {
         Logger.Info(TAG, `createNewAccount: enter, hostname=${hostname}, username=${username}`);
-        let dbAccount = new DBAccount(0, hostname, username, password);
+        const accountConfig: AccountConfig = {
+            instantUploadFolderId: 0,
+        }
+        let dbAccount = new DBAccount(0, hostname, username, password, accountConfig);
         return new Account(dbAccount);
     }
 
@@ -57,5 +62,25 @@ export class Account {
     public getDownloadUrl(path: string): string {
         let encodedPath = encodeURI(path);
         return this.baseUrlWithCredentials + `/remote.php/dav/files/${this.dbAccount.username}/${encodedPath}`;
+    }
+
+    public async getRemoteUploadFolder(): Promise<RemoteFolder | null> {
+        if (this.dbAccount.config.instantUploadFolderId === 0) {
+            Logger.Info(TAG, `account did not have instant upload configured`);
+            return null;
+        }
+        let remoteFolder = await Nextcloud.getSyncFolderManager().getRemoteFolderById(this.dbAccount.config.instantUploadFolderId);
+        if (remoteFolder === null) {
+            Logger.Error(TAG, `failed to get remote folder`);
+            return null;
+        }
+
+        if (remoteFolder.accountId !== this.id) {
+            Logger.Error(TAG, `remote folder accountId mismatches, ${remoteFolder.accountId} vs ${this.id}`)
+            this.dbAccount.config.instantUploadFolderId = 0;
+            return null;
+        }
+
+        return remoteFolder;
     }
 }

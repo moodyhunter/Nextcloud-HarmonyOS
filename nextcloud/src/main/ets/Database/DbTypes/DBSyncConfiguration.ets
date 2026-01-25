@@ -1,7 +1,7 @@
-import { DBItem, DBTableDescriptor } from "../DBManager";
-import { relationalStore } from "@kit.ArkData";
-import { DBRemoteFolderTable } from "./DBRemoteFolder";
-import { DBLocalSyncFolderTable } from "./DBLocalFolder";
+import { DBItem, DBTableDescriptor } from '../DBManager';
+import { relationalStore } from '@kit.ArkData';
+import { DBRemoteFolderTable } from './DBRemoteFolder';
+import { DBLocalFolderTable } from './DBLocalFolder';
 
 export class DBSyncConfiguration implements DBItem {
     static readonly DB_TABLE_NAME: string = 'SyncConfigurations';
@@ -17,6 +17,10 @@ export class DBSyncConfiguration implements DBItem {
 
     public getTableName(): string {
         return DBSyncConfiguration.DB_TABLE_NAME;
+    }
+
+    getTableDescription(): DBTableDescriptor<string, DBItem> {
+        return DBSyncConfigurationTable;
     }
 
     public toBucket(isCreate: boolean): relationalStore.ValuesBucket {
@@ -43,8 +47,8 @@ export const DBSyncConfigurationTable: DBTableDescriptor<DBSyncConfigurationColu
         'local_folder_id': {
             type: 'INTEGER', attrs: 'NOT NULL',
             foreignKey: {
-                target: DBLocalSyncFolderTable,
-                targetColumn: DBLocalSyncFolderTable.columns.folder_id,
+                target: DBLocalFolderTable,
+                targetColumn: DBLocalFolderTable.columns.folder_id,
             }
         },
         'remote_folder_id': {
@@ -54,6 +58,7 @@ export const DBSyncConfigurationTable: DBTableDescriptor<DBSyncConfigurationColu
             }
         },
     },
+    primaryKey: 'id',
     createItemFromBucket(bucket: relationalStore.ValuesBucket): DBSyncConfiguration {
         let id = bucket['id'] as number;
         let localFolderId = bucket['local_folder_id'] as number;

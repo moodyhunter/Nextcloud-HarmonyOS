@@ -9,14 +9,20 @@ export enum LocalFolderType {
     PhotoAlbum,
 }
 
-export class DBLocalSyncFolder implements DBItem {
-    static readonly DB_TABLE_NAME: string = 'LocalFolders';
-    id: number;
-    localPath: string;
-    alias: string;
-    folderType: LocalFolderType;
+export interface DBLocalFolderConfig {
+    instantUploadEnabled: boolean;
+}
 
-    constructor(id: number, localPath: string, alias: string, folderType: LocalFolderType) {
+@ObservedV2
+export class DBLocalFolder implements DBItem {
+    static readonly DB_TABLE_NAME: string = 'LocalFolders';
+    @Trace public id: number;
+    @Trace public localPath: string;
+    @Trace public alias: string;
+    @Trace public folderType: LocalFolderType;
+    public config: DBLocalFolderConfig;
+
+    constructor(id: number, localPath: string, alias: string, folderType: LocalFolderType, config: DBLocalFolderConfig) {
         Logger.Debug(TAG, `constructor: enter`,
             `id: ${id}`,
             `localPath: '${localPath}'`,
@@ -26,10 +32,15 @@ export class DBLocalSyncFolder implements DBItem {
         this.localPath = localPath;
         this.alias = alias;
         this.folderType = folderType;
+        this.config = config;
+    }
+
+    getTableDescription(): DBTableDescriptor<string, DBItem> {
+        return DBLocalFolderTable;
     }
 
     public getTableName(): string {
-        return DBLocalSyncFolder.DB_TABLE_NAME;
+        return DBLocalFolder.DB_TABLE_NAME;
     }
 
     public toBucket(isCreate: boolean): relationalStore.ValuesBucket {
@@ -40,6 +51,7 @@ export class DBLocalSyncFolder implements DBItem {
         bucket['local_path'] = this.localPath;
         bucket['alias'] = this.alias;
         bucket['folder_type'] = this.folderType;
+        bucket['config'] = JSON.stringify(this.config);
         return bucket;
     }
 
@@ -48,22 +60,24 @@ export class DBLocalSyncFolder implements DBItem {
     }
 }
 
-type DBLocalSyncFolderColumnNames = 'folder_id' | 'local_path' | 'alias' | 'folder_type';
+type DBLocalSyncFolderColumnNames = 'folder_id' | 'local_path' | 'alias' | 'folder_type' | 'config';
 
-export const DBLocalSyncFolderTable: DBTableDescriptor<DBLocalSyncFolderColumnNames, DBLocalSyncFolder> = {
-    tableName: DBLocalSyncFolder.DB_TABLE_NAME,
+export const DBLocalFolderTable: DBTableDescriptor<DBLocalSyncFolderColumnNames, DBLocalFolder> = {
+    tableName: DBLocalFolder.DB_TABLE_NAME,
     columns: {
         'folder_id': { type: 'INTEGER', attrs: 'PRIMARY KEY AUTOINCREMENT', },
         'local_path': { type: 'TEXT', attrs: 'NOT NULL' },
         'alias': { type: 'TEXT', attrs: 'NOT NULL' },
         'folder_type': { type: 'INTEGER', attrs: 'NOT NULL' },
+        'config': { type: 'TEXT', attrs: 'NOT NULL' },
     },
-
-    createItemFromBucket(bucket: relationalStore.ValuesBucket): DBLocalSyncFolder {
+    primaryKey: 'folder_id',
+    createItemFromBucket(bucket: relationalStore.ValuesBucket): DBLocalFolder {
         let id = bucket['folder_id'] as number;
         let localPath = bucket['local_path'] as string;
         let alias = bucket['alias'] as string;
         let folderType = bucket['folder_type'] as number;
-        return new DBLocalSyncFolder(id, localPath, alias, folderType);
+        let config: DBLocalFolderConfig = JSON.parse(bucket['config'] as string | undefined ?? '{}');
+        return new DBLocalFolder(id, localPath, alias, folderType, config);
     }
 };

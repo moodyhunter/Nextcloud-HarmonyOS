@@ -1,30 +1,30 @@
-import { Account, Logger, NCommon, Nextcloud } from 'nextcloud';
+import { Account, Logger, Nextcloud } from 'nextcloud';
 import { App, promptAction } from '@kit.ArkUI';
 import { Path } from '../utils/Path';
 import { UploadPage } from './UploadPage';
 import { LoginPage } from './LoginPage';
 import { SettingsPage } from './SettingsPage';
 import { FolderPage } from './FolderPage';
-import { Constants, FolderViewMode } from '../utils/Common';
 import { PermissionManager } from '../utils/PermissionManager';
 import { PhotoAssetsManager } from 'nextcloud/src/main/ets/SyncEngine/PhotoAssetsManager';
 import { PhotoMonitor } from '../utils/PhotoMonitor';
 import { ShowToast } from '../utils/Utils';
 import { Permissions } from '@kit.AbilityKit';
+import { TransferProgress } from './TransferProgress';
 
 const TAG = "Page-Index";
 
 const EXIT_TOAST_DURATION: number = 2000;
 
 @Entry
-@Component
+@ComponentV2
 struct Index {
-    @State currentIndex: number = 0;
-    @StorageLink(Constants.VIEW_MODE_KEY) viewMode: FolderViewMode = FolderViewMode.TwoColumns;
-    @Provide('FolderList.PathStack') pathStack: NavPathStack = new NavPathStack();
-    @StorageLink(Constants.PHONE_ACTIVE_ACCOUNT_ID) private readonly activeAccountId: number = 0;
-    @State private readonly account: Account = Nextcloud.getAccountById(this.activeAccountId);
-    @State private loginPageDialogId: number = 0;
+    @Local currentIndex: number = 0;
+    // @StorageLink(Constants.VIEW_MODE_KEY) viewMode: FolderViewMode = FolderViewMode.TwoColumns;
+    @Provider('FolderList.PathStack') pathStack: NavPathStack = new NavPathStack();
+    private readonly activeAccountId: number = 0;
+    @Local private readonly account: Account = Nextcloud.getAccountById(this.activeAccountId);
+    @Local private loginPageDialogId: number = 0;
     private backedOnce: boolean = false;
 
     onBackPress(): boolean {
@@ -59,7 +59,6 @@ struct Index {
         ];
         let result = await PermissionManager.RequestPermission(context, PERMISSIONS);
         Logger.Info(TAG, `Request permission result: ${result}`);
-        PhotoAssetsManager.initialize(Nextcloud.getSyncFolderManager().allLocalFolders);
         PhotoMonitor.beginMonitorPhotoChange();
     }
 
@@ -93,6 +92,17 @@ struct Index {
 
     build() {
         Tabs({ barPosition: BarPosition.End }) {
+
+            TabContent() {
+                UploadPage({ account: this.account })
+                    .width('100%')
+                    .height('100%')
+            }
+            .tabBar(SubTabBarStyle.of($r('app.string.tab_upload'))
+                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
+                .board({ borderRadius: 0 })
+            )
+
             TabContent() {
                 Flex({ direction: FlexDirection.Column }) {
                     Navigation(this.pathStack) {
@@ -100,36 +110,32 @@ struct Index {
                     }
                     .navBarWidth(0)
                     .mode(NavigationMode.Stack)
-
-                    Row({ space: 10 }) {
-                        Button(FolderViewMode[this.viewMode])
-                            .onClick(() => {
-                                this.viewMode = (this.viewMode % 3) + 1;
-                            })
-                            .width(100)
-                    }
-                    .width('100%')
-                    .alignItems(VerticalAlign.Center)
-                    .justifyContent(FlexAlign.Center)
-                    .height(60)
-                    .margin({ top: 10, bottom: 10 })
                 }
             }
-            .tabBar($r("app.string.tab_files"))
+            .tabBar(SubTabBarStyle.of($r("app.string.tab_files"))
+                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
+                .board({ borderRadius: 0 })
+            )
 
             TabContent() {
-                UploadPage()
+                TransferProgress()
                     .width('100%')
                     .height('100%')
             }
-            .tabBar($r('app.string.tab_upload'))
+            .tabBar(SubTabBarStyle.of('Transfer')
+                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
+                .board({ borderRadius: 0 })
+            )
 
             TabContent() {
                 SettingsPage({ currentAccount: this.account })
                     .width('100%')
                     .height('100%')
             }
-            .tabBar($r('app.string.tab_settings'))
+            .tabBar(SubTabBarStyle.of($r('app.string.tab_settings'))
+                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
+                .board({ borderRadius: 0 })
+            )
         }
         .onChange((index: number) => {
             this.currentIndex = index;
@@ -137,6 +143,10 @@ struct Index {
         .width('100%')
         .height('100%')
         .scrollable(false)
+        .linearGradient({
+            angle: 45,
+            colors: [[0x0082C9, 0], [0x1CAFFF, 1]]
+        })
     }
 
     @Builder

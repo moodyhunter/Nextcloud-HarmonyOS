@@ -5,13 +5,13 @@ import { ShowAlertDialog, ShowToast } from '../utils/Utils';
 
 const TAG = 'Pages/LoginPage';
 
-@Component
+@ComponentV2
 export struct LoginPage {
-    @Link public dialogId: number;
+    @Require @Param public dialogId: number;
     private webController: webview.WebviewController = new webview.WebviewController();
     private loginFlow = new LoginFlow();
-    @State private hostname: string = '';
-    @State private loginStarted: boolean = false;
+    @Local private hostname: string = '';
+    @Local private loginStarted: boolean = false;
 
     async doLogin(): Promise<void> {
         await webview.WebCookieManager.clearAllCookies();

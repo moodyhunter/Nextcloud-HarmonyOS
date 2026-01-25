@@ -6,28 +6,29 @@ const TAG: string = "Page-PreviewPage";
 export let PREVIEW_PAGE_NAME: string = "PreviewPage";
 
 
-@Component
+@ComponentV2
 struct PreviewPage {
-    @ObjectLink account: Account;
-    @Prop entry: DirectoryEntry;
-    @Prop fullPath: Path = new Path();
-    @State private previewLoaded: boolean = false;
-    @State private previewLink: string = this.account.getPreviewUrl(this.entry.fileId, 100, 100);
-    @State @Watch('onPreviewLevelChanged') private previewLevel: number = 0;
-    @State private failedToLoad: boolean = false;
-    @State private failedReason: string = "";
-    @State private title: string = "";
+    @Require @Param account: Account;
+    @Require @Param entry: DirectoryEntry;
+    @Require @Param fullPath: Path = new Path();
+    @Local private previewLoaded: boolean = false;
+    @Local private previewLink: string = this.account.getPreviewUrl(this.entry.fileId, 100, 100);
+    @Local private previewLevel: number = 0;
+    @Local private failedToLoad: boolean = false;
+    @Local private failedReason: string = "";
+    @Local private title: string = "";
     // Zoom and Pan states
-    @State private imageScale: number = 1;
-    @State private offsetX: number = 0;
-    @State private offsetY: number = 0;
-    @State private eventOffsetX: number = 0;
-    @State private eventOffsetY: number = 0;
-    @State private previousScale: number = 1;
+    @Local private imageScale: number = 1;
+    @Local private offsetX: number = 0;
+    @Local private offsetY: number = 0;
+    @Local private eventOffsetX: number = 0;
+    @Local private eventOffsetY: number = 0;
+    @Local private previousScale: number = 1;
     //
     private startPinchX: number = 0;
     private startPinchY: number = 0;
 
+    @Monitor('previewLevel')
     onPreviewLevelChanged() {
         Logger.Info(TAG, "Preview level: " + this.previewLevel);
         if (this.previewLevel == 4) {
@@ -95,7 +96,7 @@ struct PreviewPage {
                                     this.eventOffsetY = (event.pinchCenterY - this.startPinchY) * this.previousScale;
                                     this.imageScale = this.previousScale * event.scale;
                                 })
-                                .onActionEnd((event: GestureEvent) => {
+                                .onActionEnd((_event: GestureEvent) => {
                                     this.offsetX = (this.offsetX * this.imageScale + this.eventOffsetX) / this.imageScale;
                                     this.offsetY = (this.offsetY * this.imageScale + this.eventOffsetY) / this.imageScale;
                                     this.eventOffsetX = 0;

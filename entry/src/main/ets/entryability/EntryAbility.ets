@@ -1,6 +1,6 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want, wantAgent } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { AsyncSleep, InitialiseNextcloud, Logger, NCommon } from 'nextcloud';
+import { AsyncSleep, InitialiseNextcloud, Logger, NCommon, Nextcloud, PhotoAssetsManager } from 'nextcloud';
 import { Constants, FolderViewMode } from '../utils/Common';
 import { GlobalStorage } from '../utils/GlobalStorage';
 import { NotificationManager } from '../utils/NotificationManager';
@@ -45,6 +45,7 @@ export default class EntryAbility extends UIAbility {
             let page = this.isPc ? 'pages/PcMainPage' : 'pages/Index';
             await this.startBackgroundRunning();
             NCommon.pHelper = photoAccessHelper.getPhotoAccessHelper(this.context);
+            PhotoAssetsManager.initialize(Nextcloud.getSyncFolderManager().allLocalFolders);
             await windowStage.loadContent(page);
             if (this.isPc) {
                 this.createTrayIcon();

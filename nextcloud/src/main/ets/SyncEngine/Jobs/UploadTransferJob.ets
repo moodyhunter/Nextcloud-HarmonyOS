@@ -1,10 +1,15 @@
-import { IsRemotePathExists } from '../../webdav/TransferUtils';
+import { CreatePath, IsRemotePathExists } from '../../webdav/TransferUtils';
 import { TransferJob, TransferJobData } from './TransferJob';
 import { fileIo } from '@kit.CoreFileKit';
 import { Logger } from '../../Utils/Logger';
 import { rcp } from '@kit.RemoteCommunicationKit';
 import { TransferType } from '../TransferManagerEventIPC';
 import { NCommon } from '../../Common';
+
+export interface UploadCallback {
+    jobCreated,
+    aboutToUpload,
+}
 
 export interface UploadJobData extends TransferJobData {
     /**
@@ -16,6 +21,13 @@ export interface UploadJobData extends TransferJobData {
      * Uri of the local item
      */
     uri: string;
+
+    /**
+     * The relative path of the file being transferred within the folder structure, which can be used to derive the full paths:
+     * localPath = localFolder.path + relativePath
+     * remotePath = remoteFolder.path + relativePath
+     */
+    relativePath: string;
 }
 
 @ObservedV2
@@ -24,11 +36,13 @@ export class UploadTransferJob extends TransferJob {
     private readonly uri: string;
     private readonly file: fileIo.File;
     private readonly fileStat: fileIo.Stat;
+    private readonly relativePath: string;
 
     constructor(id: number, data: UploadJobData) {
         let extraHeaders = new Map<string, string>();
         extraHeaders.set('X-OC-MTime', `${Math.round(data.mTime / 1000)}`);
         super(id, TransferType.Upload, data, extraHeaders);
+        this.relativePath = data.relativePath;
         this.uri = data.uri;
         try {
             this.fileStat = fileIo.statSync(this.uri);
@@ -48,21 +62,29 @@ export class UploadTransferJob extends TransferJob {
         Logger.Info(this.TAG, `doWork enter`);
         const account = this.remoteFolder.account;
         const destPath = this.remoteFolder.getFullPath(this.relativePath);
-        const destFileFullPath = account.remoteBaseDirUrl() + destPath;
+        const destFile = destPath + '/' + this.filename;
 
-        let shouldReplace = true // NCommon.Preference.replaceExistingFiles;
+        let shouldReplace = NCommon.Preference.replaceExistingFiles;
         if (!shouldReplace) {
-            if (await IsRemotePathExists(session, account, destPath)) {
-                Logger.Info(this.TAG, `file already exists: ${destPath}, not replacing as per settings`);
+            if (await IsRemotePathExists(session, account, destFile)) {
+                Logger.Info(this.TAG, `file already exists: ${destFile}, not replacing as per settings`);
                 session.close();
                 this.uploadStatusCode = 204; // No Content, file already exists
+                return;
+            }
+        }
+        {
+            let mkdirResult = await CreatePath(this.remoteFolder.account, destPath);
+            if (mkdirResult !== 201 && mkdirResult !== 409 && mkdirResult !== 405) {
+                Logger.Error(this.TAG, `failed to create path: ${destPath}`)
+                this.uploadStatusCode = mkdirResult;
                 return;
             }
         }
 
         const tempDirectory = NCommon.RandomString(16);
         const chunkedUploadRemoteDir = account.chunkedUploadBaseUrl() + tempDirectory + `/`;
-        session.configuration!.headers!['Destination'] = destFileFullPath;
+        session.configuration!.headers!['Destination'] = account.remoteBaseDirUrl() + destFile;
 
         try {
             let resp = await session.fetch(new rcp.Request(chunkedUploadRemoteDir, "MKCOL", {}));
@@ -121,4 +143,4 @@ export class UploadTransferJob extends TransferJob {
     }
 }
 
-const DEFAULT_CHUNK_SIZE = 20 * 1024 * 1024; // 20 MB
+const DEFAULT_CHUNK_SIZE = 50 * 1024 * 1024; // 50 MB
