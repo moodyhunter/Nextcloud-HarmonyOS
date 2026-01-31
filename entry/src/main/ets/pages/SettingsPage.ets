@@ -1,4 +1,7 @@
-import { Account, Logger, NCommon, Nextcloud } from 'nextcloud';
+import {
+    Account, Logger, NCommon, Nextcloud, LocalFolder, LocalFolderType, Category,
+    PhotoAssetsManager
+} from 'nextcloud';
 import { LengthMetrics } from '@kit.ArkUI';
 import application from '@ohos.app.ability.application';
 import { ShowToast } from '../utils/Utils';
@@ -14,7 +17,15 @@ export struct SettingsPage {
     @State private uploadReplaceExisting: boolean = false;
     @State private uploadBaseDirectory: string = '/';
 
+    private categories: Category[] = [];
     aboutToAppear(): void {
+        this.categories = Array.from(PhotoAssetsManager.categories.values());
+        this.categories.sort((a: Category, b: Category): number => {
+            if (a.instantUploadEnabled !== b.instantUploadEnabled) {
+                return a.instantUploadEnabled ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+        })
         this.doLoadSettings();
     }
 
@@ -29,11 +40,12 @@ export struct SettingsPage {
 
             Scroll(this.scroller) {
                 Flex({ direction: FlexDirection.Column }) {
-                    Column({ space: 4 }) {
+                    Column() {
                         Text($r('app.string.login_info'))
                             .width('100%')
                             .fontSize($r('sys.float.subheader_title_font_size'))
                             .fontWeight(FontWeight.Bold)
+                            .margin({ bottom: 4 })
 
                         Row() {
                             Text($r('app.string.username'))
@@ -53,15 +65,19 @@ export struct SettingsPage {
                         .width('100%')
                         .height(24)
                     }
+                    .backgroundColor($r('sys.color.gray_02'))
+                    .borderRadius(8)
+                    .padding(12)
 
                     Divider()
                         .margin({ top: 16, bottom: 16 })
 
-                    Column({ space: 4 }) {
+                    Column() {
                         Text($r('app.string.upload'))
                             .width('100%')
                             .fontWeight(FontWeight.Bold)
                             .fontSize($r('sys.float.subheader_title_font_size'))
+                            .margin({ bottom: 4 })
 
                         Row() {
                             Text($r('app.string.upload_base_directory'))
@@ -89,18 +105,52 @@ export struct SettingsPage {
                         .width('100%')
                         .height(24)
                     }
+                    .backgroundColor($r('sys.color.gray_02'))
+                    .borderRadius(8)
+                    .padding(12)
 
                     Divider()
                         .margin({ top: 16, bottom: 16 })
 
-                    Column({ space: 4 }) {
+                    Column({ space: 8 }) {
                         Text($r('app.string.categories'))
                             .width('100%')
                             .fontWeight(FontWeight.Bold)
                             .fontSize($r('sys.float.subheader_title_font_size'))
+                            .margin({ bottom: 4 })
+
+                        Repeat(this.categories).each((item: RepeatItem<Category>) => {
+                            Row() {
+                                Column() {
+                                    Text(item.item.name)
+                                    Text(`Album ${item.item.localFolder.albumId}`)
+                                }
+                                .alignItems(HorizontalAlign.Start)
+
+                                Row({ space: 8 }) {
+                                    Text('Upload')
+                                    Toggle({ type: ToggleType.Switch, isOn: item.item.instantUploadEnabled })
+                                        .onChange((value: boolean) => {
+                                            item.item.instantUploadEnabled = value;
+                                            Nextcloud.getSyncFolderManager().updateLocalFolder(item.item.localFolder);
+                                        })
+                                        .height('60px')
+                                        .width('107px')
+                                }
+                                .alignItems(VerticalAlign.Center)
+                            }
+                            .justifyContent(FlexAlign.SpaceBetween)
+                            .width('100%')
+                            .backgroundColor($r('sys.color.gray_03'))
+                            .borderRadius(8)
+                            .padding(12)
+                        })
                     }
+                    .padding(12)
+                    .backgroundColor($r('sys.color.gray_02'))
+                    .borderRadius(8)
                 }
-                .margin({ left: 24, right: 24 })
+                .margin({ left: 16, right: 16 })
             }
             .align(Alignment.TopStart)
             .edgeEffect(EdgeEffect.Spring)
@@ -114,6 +164,7 @@ export struct SettingsPage {
                 .margin({ top: 16, bottom: 16 })
 
             Button('DROP DATABASE')
+                .visibility(Visibility.None)
                 .backgroundColor(Color.Red)
                 .onClick(async () => {
                     await Nextcloud.recreateDatabase();

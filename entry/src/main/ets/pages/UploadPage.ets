@@ -90,137 +90,138 @@ struct CategoryView {
     @Require @Param category: Category;
     @Local private isEditing: boolean = false;
     @Local private isExpanded: boolean = false;
-    @Local private isSyncEnabled: boolean = false;
+    @Local private viewHeight: number = 56;
 
     aboutToAppear(): void {
-        if (this.category.instantUploadEnabled) {
-            this.isSyncEnabled = true;
+    }
+
+    @Builder
+    topBar() {
+        Row({ space: 16 }) {
+            Row({ space: 8 }) {
+                if (this.isEditing) {
+                    TextInput({ text: this.category.name })
+                        .fontWeight(FontWeight.Bold)
+                        .flexShrink(1)
+                        .fontSize(16)
+                        .borderRadius(0)
+                        .onSubmit(async (enterKey: EnterKeyType, event: SubmitEvent) => {
+                            if (event.text.length === 0) {
+                                this.getUIContext()
+                                    .getPromptAction()
+                                    .showDialog({
+                                        title: `Category Rename`,
+                                        message: `Category name cannot be empty!`,
+                                    })
+                                    .catch((e: Error) => {
+                                        Logger.Error(TAG, `failed to show prompt dialog, ${JSON.stringify(e)}`);
+                                    });
+
+                                event.keepEditableState();
+                                return;
+                            }
+                            Logger.Info(TAG, `category edit onSubmit: ${EnterKeyType[enterKey]}`)
+                            this.category.setAlias(event.text);
+                            Nextcloud.getSyncFolderManager().updateLocalFolder(this.category.localFolder);
+                        })
+                        .onBlur(() => {
+                            this.isEditing = false;
+                        })
+                } else {
+                    Text(this.category.name)
+                        .fontSize(24)
+
+                    SymbolGlyph($r('sys.symbol.doc_plaintext_and_pencil'))
+                        .fontSize(12)
+                        .fontColor([Color.Gray])
+                        .onClick(() => {
+                            this.isEditing = true;
+                        })
+                }
+            }
+            .flexShrink(1)
+            .height(36)
+
+            Row({ space: 16 }) {
+                Button() {
+                    SymbolGlyph(this.isExpanded ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+                        .fontSize(24)
+                        .fontColor([$r('sys.color.font')])
+                }
+                .onClick(() => {
+                    this.isExpanded = !this.isExpanded;
+                    this.viewHeight = this.isExpanded ? 382 : 56;
+                })
+                .padding(8)
+                .type(ButtonType.Circle)
+                .buttonStyle(ButtonStyleMode.TEXTUAL)
+                .backgroundColor($r('sys.color.gray_03'))
+            }
         }
+        .onClick(() => {
+            this.isExpanded = !this.isExpanded;
+            this.viewHeight = this.isExpanded ? 382 : 56;
+        })
+        .justifyContent(FlexAlign.SpaceBetween)
+        .width('100%')
+    }
+
+    @Builder
+    photoGrid() {
+        Grid() {
+            LazyForEach(this.category.visibleItems, (asset: PhotoItem, index: number) => {
+                GridItem() {
+                    PhotoView({ asset: asset, category: this.category, account: this.account })
+                        .enabled(this.category.instantUploadEnabled)
+                }
+                .width('100%')
+                .onAppear(() => {
+                    if (index == this.category.visibleItems.totalCount() - 1) {
+                        this.category.loadNextBatch();
+                    }
+                })
+            })
+        }
+        .layoutDirection(GridDirection.Row)
+        .fadingEdge(true)
+        .columnsTemplate(`repeat(auto-fit, ${PHOTO_PREVIEW_SIZE})`)
+        .scrollBar(BarState.On)
+        .edgeEffect(EdgeEffect.Spring)
+        .columnsGap(8)
+        .rowsGap(8)
+        .cachedCount(10)
+        .width('100%')
+        .height('100%')
+        .margin({ bottom: 12 })
     }
 
     build() {
         Column({ space: 8 }) {
-            Row({ space: 16 }) {
-                Row({ space: 8 }) {
-                    if (this.isEditing) {
-                        TextInput({ text: this.category.name })
-                            .fontWeight(FontWeight.Bold)
-                            .flexShrink(1)
-                            .fontSize(16)
-                            .borderRadius(0)
-                            .onSubmit(async (enterKey: EnterKeyType, event: SubmitEvent) => {
-                                if (event.text.length === 0) {
-                                    this.getUIContext()
-                                        .getPromptAction()
-                                        .showDialog({
-                                            title: `Category Rename`,
-                                            message: `Category name cannot be empty!`,
-                                        })
-                                        .catch((e: Error) => {
-                                            Logger.Error(TAG, `failed to show prompt dialog, ${JSON.stringify(e)}`);
-                                        });
+            // Top Bar Row
+            this.topBar()
 
-                                    event.keepEditableState();
-                                    return;
-                                }
-                                Logger.Info(TAG, `category edit onSubmit: ${EnterKeyType[enterKey]}`)
-                                this.category.setAlias(event.text);
-                                Nextcloud.getSyncFolderManager().updateLocalFolder(this.category.localFolder);
-                            })
-                            .onBlur(() => {
-                                this.isEditing = false;
-                            })
-                    } else {
-                        Text(this.category.name)
-                            .fontSize(24)
+            Blank()
+                .height(6)
 
-                        SymbolGlyph($r('sys.symbol.doc_plaintext_and_pencil'))
-                            .fontSize(12)
-                            .fontColor([Color.Gray])
-                            .onClick(() => {
-                                this.isEditing = true;
-                            })
-                    }
-                }
-                .flexShrink(1)
-                .height(36)
+            Stack() {
+                this.photoGrid();
 
-                Row({ space: 16 }) {
-                    Row() {
-                        Checkbox()
-                            .select(this.isSyncEnabled)
-                            .onChange((value: boolean) => {
-                                this.toggleSyncEnable(value);
-                            })
-                        Text(`Upload`)
-                    }
-
-                    Button() {
-                        SymbolGlyph(this.isExpanded ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
-                            .fontSize(24)
-                            .fontColor([$r('sys.color.font')])
-                    }
-                    .onClick(() => {
-                        this.isExpanded = !this.isExpanded;
-                    })
-                    .padding(8)
-                    .type(ButtonType.Circle)
-                    .buttonStyle(ButtonStyleMode.TEXTUAL)
-                    .backgroundColor($r('sys.color.gray_03'))
-                }
-            }
-            .justifyContent(FlexAlign.SpaceBetween)
-            .width('100%')
-
-            if (this.isExpanded) {
-                Blank()
-                    .height(6)
-
-                Stack() {
-                    Grid() {
-                        LazyForEach(this.category.visibleItems, (asset: PhotoItem, index: number) => {
-                            GridItem() {
-                                PhotoView({ asset: asset, category: this.category, account: this.account })
-                                    .enabled(this.isSyncEnabled)
-                            }
-                            .width('100%')
-                            .onAppear(() => {
-                                if (index == this.category.visibleItems.totalCount() - 1) {
-                                    this.category.loadNextBatch();
-                                }
-                            })
+                Column() {
+                    Button($r('app.string.upload_all'))
+                        .onClick(async () => {
+                            const remoteFolder = await getUploadRemoteFolder(this.account);
+                            this.category.uploadAllAssets(remoteFolder);
                         })
-                    }
-                    .layoutDirection(GridDirection.Row)
-                    .fadingEdge(true)
-                    .columnsTemplate(`repeat(auto-fit, ${PHOTO_PREVIEW_SIZE})`)
-                    .scrollBar(BarState.On)
-                    .edgeEffect(EdgeEffect.Spring)
-                    .columnsGap(8)
-                    .rowsGap(8)
-                    .cachedCount(10)
-                    .width('100%')
-                    .height('100%')
-                    .margin({ bottom: 12 })
-
-                    Column() {
-                        Button($r('app.string.upload_all'))
-                            .onClick(async () => {
-                                Logger.Info(TAG, `Upload all in '${this.category.name}'`);
-                                const remoteFolder = await getUploadRemoteFolder(this.account);
-                                this.category.uploadAllAssets(remoteFolder);
-                            })
-                            .backgroundColor(this.isSyncEnabled ? '#0082C9' : 'gray')
-                            .width('30%')
-                    }
-                    .enabled(this.isSyncEnabled)
-                    .width('100%')
-                    .position({ bottom: 10 })
+                        .backgroundColor(this.category.instantUploadEnabled ? '#0082C9' : 'gray')
+                        .width('30%')
                 }
+                .enabled(this.category.instantUploadEnabled)
                 .width('100%')
-                .height('100%')
-                .constraintSize({ maxHeight: 300, minHeight: 100 })
+                .position({ bottom: 10 })
             }
+            .width('100%')
+            .height('100%')
+            .constraintSize({ maxHeight: 300, minHeight: 100 })
         }
         .borderRadius(16)
         .padding({
@@ -231,19 +232,14 @@ struct CategoryView {
         })
         .backgroundColor($r('sys.color.gray_02'))
         .width('100%')
-        .height('auto')
-    }
-
-    private async toggleSyncEnable(enabled: boolean) {
-        Logger.Info(TAG, `setting category ${this.category.name} sync enable to ${enabled}`);
-        this.isSyncEnabled = enabled;
-        this.category.localFolder.dbLocalFolder.config.instantUploadEnabled = this.isSyncEnabled;
-        await Nextcloud.getSyncFolderManager().updateLocalFolder(this.category.localFolder);
-        Logger.Info(TAG, `done`);
-    }
-
-    private async uploadAllAssets() {
-
+        .height(this.viewHeight)
+        .renderFit(RenderFit.CENTER)
+        .clip(true)
+        .animation({
+            duration: 250,
+            curve: Curve.Friction,
+            playMode: PlayMode.Normal,
+        })
     }
 }
 
@@ -269,7 +265,9 @@ export struct UploadPage {
             List({ space: 10 }) {
                 Repeat(this.categories)
                     .each((item: RepeatItem<Category>) => {
-                        CategoryView({ category: item.item, account: this.account })
+                        if (item.item.instantUploadEnabled) {
+                            CategoryView({ category: item.item, account: this.account })
+                        }
                     })
             }
             .width('100%')

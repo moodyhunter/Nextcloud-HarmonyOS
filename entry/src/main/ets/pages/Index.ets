@@ -92,17 +92,6 @@ struct Index {
 
     build() {
         Tabs({ barPosition: BarPosition.End }) {
-
-            TabContent() {
-                UploadPage({ account: this.account })
-                    .width('100%')
-                    .height('100%')
-            }
-            .tabBar(SubTabBarStyle.of($r('app.string.tab_upload'))
-                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
-                .board({ borderRadius: 0 })
-            )
-
             TabContent() {
                 Flex({ direction: FlexDirection.Column }) {
                     Navigation(this.pathStack) {
@@ -113,6 +102,17 @@ struct Index {
                 }
             }
             .tabBar(SubTabBarStyle.of($r("app.string.tab_files"))
+                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
+                .board({ borderRadius: 0 })
+            )
+
+
+            TabContent() {
+                UploadPage({ account: this.account })
+                    .width('100%')
+                    .height('100%')
+            }
+            .tabBar(SubTabBarStyle.of($r('app.string.tab_upload'))
                 .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
                 .board({ borderRadius: 0 })
             )

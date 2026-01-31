@@ -9,8 +9,21 @@ export enum LocalFolderType {
     PhotoAlbum,
 }
 
-export interface DBLocalFolderConfig {
-    instantUploadEnabled: boolean;
+@ObservedV2
+export class DBLocalFolderConfig {
+    @Trace instantUploadEnabled: boolean = false;
+
+    constructor(record: Record<string, string | boolean>) {
+        this.instantUploadEnabled = record['instantUploadEnabled'] as boolean ?? false;
+    }
+
+    public toJson() {
+        let object: Record<string, string | boolean> = {
+            'instantUploadEnabled': this.instantUploadEnabled,
+        };
+
+        return JSON.stringify(object);
+    }
 }
 
 @ObservedV2
@@ -51,7 +64,7 @@ export class DBLocalFolder implements DBItem {
         bucket['local_path'] = this.localPath;
         bucket['alias'] = this.alias;
         bucket['folder_type'] = this.folderType;
-        bucket['config'] = JSON.stringify(this.config);
+        bucket['config'] = this.config.toJson();
         return bucket;
     }
 
@@ -77,7 +90,7 @@ export const DBLocalFolderTable: DBTableDescriptor<DBLocalSyncFolderColumnNames,
         let localPath = bucket['local_path'] as string;
         let alias = bucket['alias'] as string;
         let folderType = bucket['folder_type'] as number;
-        let config: DBLocalFolderConfig = JSON.parse(bucket['config'] as string | undefined ?? '{}');
+        let config = new DBLocalFolderConfig(JSON.parse(bucket['config'] as string | undefined ?? '{}'));
         return new DBLocalFolder(id, localPath, alias, folderType, config);
     }
 };

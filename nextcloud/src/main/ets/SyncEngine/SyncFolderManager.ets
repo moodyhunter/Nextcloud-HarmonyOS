@@ -42,9 +42,7 @@ export class SyncFolderManager {
 
     public async addLocalAlbumFolder(albumId: number, alias: string): Promise<LocalFolder> {
         Logger.Info(TAG, `addLocalAlbumFolder: enter`);
-        let config: DBLocalFolderConfig = {
-            instantUploadEnabled: false
-        };
+        let config = new DBLocalFolderConfig({});
         let dbLocalFolder = new DBLocalFolder(0, albumId.toString(), alias, LocalFolderType.PhotoAlbum, config);
         let localFolder = new LocalFolder(dbLocalFolder);
         let insertedId = await this.dbManager_.createItem(dbLocalFolder);
@@ -56,9 +54,7 @@ export class SyncFolderManager {
 
     public async addLocalFolder(localPath: string, alias: string): Promise<LocalFolder> {
         Logger.Info(TAG, `addLocalFolder: enter`);
-        let config: DBLocalFolderConfig = {
-            instantUploadEnabled: false
-        };
+        let config = new DBLocalFolderConfig({})
         let dbLocalFolder = new DBLocalFolder(0, localPath, alias, LocalFolderType.Regular, config);
         let localFolder = new LocalFolder(dbLocalFolder);
         let insertedId = await this.dbManager_.createItem(dbLocalFolder);

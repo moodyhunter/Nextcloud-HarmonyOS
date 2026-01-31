@@ -3,6 +3,8 @@
  */
 export { LocalFolder } from './Database/Types/LocalFolder';
 
+export { LocalFolderType } from './Database/DbTypes/DBLocalFolder';
+
 export { RemoteFolder } from './Database/Types/RemoteFolder';
 
 export { SyncConfiguration } from './Database/Types/SyncConfiguration';

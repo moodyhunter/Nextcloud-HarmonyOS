@@ -6,7 +6,6 @@ import { PhotoAssetsManager } from './PhotoAssetsManager';
 import { Logger } from '../Utils/Logger';
 import { RemoteFolder } from '../Database/Types/RemoteFolder';
 import { CreateSession, IsRemotePathExists } from '../webdav/TransferUtils';
-import { UploadTransferJob } from './Jobs/UploadTransferJob';
 
 const TAG = 'models/Category';
 
@@ -22,7 +21,7 @@ export enum AddPosition {
     Prepend
 }
 
-const BATCH_SIZE = 150;
+const BATCH_SIZE = 75;
 
 export class Category {
     visibleItems: ImageListDataSource = new ImageListDataSource();
@@ -42,6 +41,10 @@ export class Category {
 
     public get instantUploadEnabled() {
         return this.localFolder.dbLocalFolder.config.instantUploadEnabled;
+    }
+
+    public set instantUploadEnabled(value: boolean) {
+        this.localFolder.dbLocalFolder.config.instantUploadEnabled = value;
     }
 
     public setAlias(newAlias: string) {
@@ -84,13 +87,8 @@ export class Category {
         }
     }
 
-
-    // getTotalAvailableCount(): number {
-    //     return this.visibleItems.totalCount() + this.invisibleBackedItems.size;
-    // }
-
     public async uploadAllAssets(remoteFolder: RemoteFolder): Promise<void> {
-        const BATCH_SIZE = 20;
+        const BATCH_SIZE = 16;
         Logger.Info(TAG, `uploadAllAssets: enter`);
 
         let jobs: Promise<void>[] = [];
