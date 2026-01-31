@@ -1,11 +1,15 @@
 import { ImageListDataSource } from './ImageListDataSource';
-import { PhotoItem } from './PhotoItem';
+import { PhotoItem, UploadStatus } from './PhotoItem';
 import { LocalFolder } from '../Database/Types/LocalFolder';
 import { LocalFolderType } from '../Database/DbTypes/DBLocalFolder';
 import { PhotoAssetsManager } from './PhotoAssetsManager';
 import { Logger } from '../Utils/Logger';
+import { RemoteFolder } from '../Database/Types/RemoteFolder';
+import { CreateSession, IsRemotePathExists } from '../webdav/TransferUtils';
+import { UploadTransferJob } from './Jobs/UploadTransferJob';
 
 const TAG = 'models/Category';
+
 
 export enum AddAssetResult {
     Added,
@@ -66,11 +70,17 @@ export class Category {
         }
     }
 
-    async loadNextBatch(): Promise<void> {
+    async loadNextBatch(): Promise<number> {
         const offset = this.visibleItems.totalCount();
-        let items = await PhotoAssetsManager.loadNextBatchFromAlbumId(this.localFolder.albumId, offset, BATCH_SIZE);
-        for (let item of items) {
-            this.visibleItems.addAsset(item);
+        try {
+            let items = await PhotoAssetsManager.loadNextBatchFromAlbumId(this.localFolder.albumId, offset, BATCH_SIZE);
+            for (let item of items) {
+                this.visibleItems.addAsset(item);
+            }
+            return items.length;
+        } catch (error) {
+            Logger.Error(TAG, `loadNextBatch: failed: ${JSON.stringify(error)}`);
+            return 0;
         }
     }
 
@@ -78,41 +88,57 @@ export class Category {
     // getTotalAvailableCount(): number {
     //     return this.visibleItems.totalCount() + this.invisibleBackedItems.size;
     // }
-    //
-    //     async uploadAllAssets(notify: boolean = true) {
-    //         const BATCH_SIZE = 8;
-    //         // const totalCount = this.getTotalAvailableCount();
-    //         // let total = Math.ceil(totalCount / BATCH_SIZE) * BATCH_SIZE;
-    //         let totalUploaded = 0;
-    //         for (let i = 0; i < total; i += BATCH_SIZE) {
-    //             let batch = this.getAssets(i, BATCH_SIZE);
-    //
-    //             let canStop = true;
-    //             //
-    //             //             let futures = batch.map(asset => {
-    //             //                 return asset.upload(NCommon.Preference.baseUploadDirectory + this.location).then((result) => {
-    //             //                     canStop = canStop && result === UploadResult.EXISTED;
-    //             //                     totalUploaded++;
-    //             //                 }).then(() => {
-    //             //                     if (notify) {
-    //             //                         // NotificationManager.publishNotification('title', 'content', 1);
-    //             //                     }
-    //             //                 });
-    //             //             });
-    //
-    //             // await Promise.all(futures);
-    //             // if (canStop) {
-    //             //     if (notify) {
-    //             //         // NotificationManager.publishNotification('title', 'content', 1);
-    //             //     }
-    //             //     promptAction.showToast({
-    //             //         message: `Upload is probably completed`,
-    //             //         duration: 2000,
-    //             //     });
-    //             //     break;
-    //             // }
-    //         }
-    // }
+
+    public async uploadAllAssets(remoteFolder: RemoteFolder): Promise<void> {
+        const BATCH_SIZE = 20;
+        Logger.Info(TAG, `uploadAllAssets: enter`);
+
+        let jobs: Promise<void>[] = [];
+        let totalCount = this.visibleItems.totalCount();
+        let i = 0;
+        let continuesExistance = 0;
+        while (true) {
+            // to the current end
+            if (i === totalCount) {
+                const nextBatchSize = await this.loadNextBatch();
+                if (nextBatchSize === 0) {
+                    Logger.Info(TAG, `uploadAllAssets: reached to the end`);
+                    break;
+                }
+                Logger.Info(TAG, `uploadAllAssets: continue from ${i} to ${totalCount}+${nextBatchSize}`);
+                totalCount = this.visibleItems.totalCount();
+            }
+            Logger.Info(TAG, `uploadAllAssets: checking for ${i}/${totalCount} photo item`);
+            const photoItem = this.visibleItems.getData(i++);
+            photoItem.uploadStatus = UploadStatus.Pending;
+            const uploadData = photoItem.getUploadJobData(this.name, remoteFolder);
+            const fullRemotePath = '/' + remoteFolder.remotePath + '/' + uploadData.relativePath + '/' + uploadData.fileName;
+
+            let exists: boolean;
+            {
+                const rcpSession = CreateSession(remoteFolder.account);
+                exists = await IsRemotePathExists(rcpSession, remoteFolder.account, fullRemotePath);
+                rcpSession.close();
+            }
+            Logger.Info(TAG, `uploadAllAssets: relative path '${fullRemotePath}' exists: ${exists}`);
+
+            if (exists) {
+                continuesExistance++;
+                photoItem.uploadStatus = UploadStatus.Existed;
+                if (continuesExistance === BATCH_SIZE) {
+                    Logger.Info(TAG, `uploadAllAssets: last ${BATCH_SIZE} exists, complete`);
+                    break;
+                }
+            } else {
+                continuesExistance = 0;
+                photoItem.uploadStatus = UploadStatus.Pending;
+                let job = photoItem.getUploadJob(this.name, remoteFolder);
+                jobs.push(job.start());
+            }
+        }
+
+        await Promise.all(jobs);
+    }
 
     private matchesAsset(asset: PhotoItem): boolean {
         return asset.ownerAlbumId === this.localFolder.albumId;

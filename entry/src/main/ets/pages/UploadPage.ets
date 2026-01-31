@@ -1,7 +1,32 @@
-import { Account, Category, Logger, Nextcloud, PhotoAssetsManager, PhotoItem, UploadStatus } from 'nextcloud';
+import {
+    Account,
+    Category,
+    Logger,
+    Nextcloud,
+    PhotoAssetsManager,
+    RemoteFolder,
+    PhotoItem,
+    UploadStatus,
+} from 'nextcloud';
 
 const TAG = "Page-UploadPage"
 const PHOTO_PREVIEW_SIZE = 75;
+
+async function getUploadRemoteFolder(account: Account): Promise<RemoteFolder> {
+    let remoteFolderId = account.dbAccount.config.instantUploadFolderId;
+    let remoteFolder = await Nextcloud.getSyncFolderManager().getRemoteFolderById(remoteFolderId);
+    if (remoteFolder === null) {
+        Logger.Info(TAG, `creating instant upload remote folder`)
+        // not configured, create new
+        remoteFolder = await Nextcloud.getSyncFolderManager().addRemoteFolder(account, '/InstantUpload/', 'Instant Upload');
+        remoteFolderId = remoteFolder.id;
+        account.dbAccount.config.instantUploadFolderId = remoteFolder.id;
+        await Nextcloud.updateAccount(account);
+        Logger.Info(TAG, `created instant upload remote folder`)
+    }
+    Logger.Info(TAG, `instant upload remote dir: ${remoteFolderId}`);
+    return remoteFolder!;
+}
 
 @ComponentV2
 struct PhotoView {
@@ -15,9 +40,9 @@ struct PhotoView {
             case UploadStatus.Completed:
                 return Color.Green;
             case UploadStatus.Pending:
-                return Color.Yellow;
+                return Color.Pink;
             case UploadStatus.Uploading:
-                return Color.White;
+                return Color.Yellow;
             case UploadStatus.Failed:
             case UploadStatus.FailedCreatingPath:
                 return Color.Red;
@@ -48,18 +73,7 @@ struct PhotoView {
         .borderWidth(3)
         .borderColor(this.getUploadColor(this.asset.uploadStatus))
         .onClick(async () => {
-            let remoteFolderId = this.account.dbAccount.config.instantUploadFolderId;
-            let remoteFolder = await Nextcloud.getSyncFolderManager().getRemoteFolderById(remoteFolderId);
-            if (remoteFolder === null) {
-                Logger.Info(TAG, `creating instant upload remote folder`)
-                // not configured, create new
-                remoteFolder = await Nextcloud.getSyncFolderManager().addRemoteFolder(this.account, '/InstantUpload/', 'Instant Upload');
-                remoteFolderId = remoteFolder.id;
-                this.account.dbAccount.config.instantUploadFolderId = remoteFolder.id;
-                await Nextcloud.updateAccount(this.account);
-                Logger.Info(TAG, `created instant upload remote folder`)
-            }
-            Logger.Info(TAG, `instant upload remote dir: ${remoteFolderId}`);
+            const remoteFolder = await getUploadRemoteFolder(this.account);
             this.asset.getUploadJob(this.category.name, remoteFolder).start();
         })
         .onAppear(async () => {
@@ -96,12 +110,15 @@ struct CategoryView {
                             .borderRadius(0)
                             .onSubmit(async (enterKey: EnterKeyType, event: SubmitEvent) => {
                                 if (event.text.length === 0) {
-                                    this.getUIContext().getPromptAction().showDialog({
-                                        title: `Category Rename`,
-                                        message: `Category name cannot be empty!`,
-                                    }).catch((e: Error) => {
-                                        Logger.Error(TAG, `failed to show prompt dialog, ${JSON.stringify(e)}`);
-                                    });
+                                    this.getUIContext()
+                                        .getPromptAction()
+                                        .showDialog({
+                                            title: `Category Rename`,
+                                            message: `Category name cannot be empty!`,
+                                        })
+                                        .catch((e: Error) => {
+                                            Logger.Error(TAG, `failed to show prompt dialog, ${JSON.stringify(e)}`);
+                                        });
 
                                     event.keepEditableState();
                                     return;
@@ -164,6 +181,7 @@ struct CategoryView {
                         LazyForEach(this.category.visibleItems, (asset: PhotoItem, index: number) => {
                             GridItem() {
                                 PhotoView({ asset: asset, category: this.category, account: this.account })
+                                    .enabled(this.isSyncEnabled)
                             }
                             .width('100%')
                             .onAppear(() => {
@@ -187,13 +205,15 @@ struct CategoryView {
 
                     Column() {
                         Button($r('app.string.upload_all'))
-                            .onClick(() => {
+                            .onClick(async () => {
                                 Logger.Info(TAG, `Upload all in '${this.category.name}'`);
-                                // this.category.uploadAllAssets();
+                                const remoteFolder = await getUploadRemoteFolder(this.account);
+                                this.category.uploadAllAssets(remoteFolder);
                             })
-                            .backgroundColor('# 0082C9')
+                            .backgroundColor(this.isSyncEnabled ? '#0082C9' : 'gray')
                             .width('30%')
                     }
+                    .enabled(this.isSyncEnabled)
                     .width('100%')
                     .position({ bottom: 10 })
                 }
@@ -220,6 +240,10 @@ struct CategoryView {
         this.category.localFolder.dbLocalFolder.config.instantUploadEnabled = this.isSyncEnabled;
         await Nextcloud.getSyncFolderManager().updateLocalFolder(this.category.localFolder);
         Logger.Info(TAG, `done`);
+    }
+
+    private async uploadAllAssets() {
+
     }
 }
 

@@ -4,7 +4,7 @@ import { image } from '@kit.ImageKit';
 import { FormatTime } from '../Utils/CommonUtils';
 import { RemoteFolder } from '../Database/Types/RemoteFolder';
 import { BaseJob, JobState } from './Jobs/BaseJob';
-import { UploadTransferJob } from './Jobs/UploadTransferJob';
+import { UploadJobData, UploadTransferJob } from './Jobs/UploadTransferJob';
 import { Logger } from '../Utils/Logger';
 
 const TAG = 'PhotoItem';
@@ -70,19 +70,23 @@ export class PhotoItem {
         return await this.innerAsset.getThumbnail(size);
     }
 
+    public getUploadJobData(categoryName: string, remoteFolder: RemoteFolder): UploadJobData {
+        return {
+            fileName: this.displayName,
+            mTime: this.dateTakenMs,
+            uri: this.uri,
+            remoteFolder: remoteFolder,
+            relativePath: categoryName + '/' + FormatTime(this.dateTaken, DEFAULT_FORMAT) + '/',
+        };
+    }
+
     public getUploadJob(categoryName: string, remoteFolder: RemoteFolder): UploadTransferJob {
         Logger.Info(TAG, `getUploadJob: enter`);
         if (this.uploadJob) {
             return this.uploadJob;
         }
 
-        this.uploadJob = JobManager.createUploadJob({
-            fileName: this.displayName,
-            mTime: this.dateTakenMs,
-            uri: this.uri,
-            remoteFolder: remoteFolder,
-            relativePath: categoryName + '/' + FormatTime(this.dateTaken, DEFAULT_FORMAT) + '/',
-        });
+        this.uploadJob = JobManager.createUploadJob(this.getUploadJobData(categoryName, remoteFolder));
 
         this.uploadJob.addStateListener((baseJob: BaseJob, state: JobState) => {
             switch (state) {

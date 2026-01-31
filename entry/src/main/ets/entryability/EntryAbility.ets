@@ -3,7 +3,6 @@ import { window } from '@kit.ArkUI';
 import { AsyncSleep, InitialiseNextcloud, Logger, NCommon, Nextcloud, PhotoAssetsManager } from 'nextcloud';
 import { Constants, FolderViewMode } from '../utils/Common';
 import { GlobalStorage } from '../utils/GlobalStorage';
-import { NotificationManager } from '../utils/NotificationManager';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { statusBarManager } from '@kit.DeskTopExtensionKit';

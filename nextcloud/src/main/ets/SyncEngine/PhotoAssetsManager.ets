@@ -10,6 +10,8 @@ import { Logger } from '../Utils/Logger';
 
 const TAG = 'Utils/PhotoAssetsManager';
 
+const OWNER_ALBUM_ID = 'owner_album_id'; // API22
+
 @ObservedV2
 class PhotoAssetsManagerImpl {
     private static readonly FETCH_COLUMNS = [
@@ -27,7 +29,7 @@ class PhotoAssetsManagerImpl {
         photoAccessHelper.PhotoKeys.DYNAMIC_RANGE_TYPE,
         photoAccessHelper.PhotoKeys.DETAIL_TIME,
         photoAccessHelper.PhotoKeys.DATE_TAKEN_MS,
-        photoAccessHelper.PhotoKeys.OWNER_ALBUM_ID,
+        OWNER_ALBUM_ID,
     ];
     @Trace public categories: Map<number, Category> = new Map();
 
@@ -39,7 +41,7 @@ class PhotoAssetsManagerImpl {
         const FETCH_OPTIONS: photoAccessHelper.FetchOptions = {
             fetchColumns: PhotoAssetsManagerImpl.FETCH_COLUMNS,
             predicates: new dataSharePredicates.DataSharePredicates()
-                .equalTo(photoAccessHelper.PhotoKeys.OWNER_ALBUM_ID, albumId.toString())
+                .equalTo(OWNER_ALBUM_ID, albumId.toString())
                 .orderByDesc(photoAccessHelper.PhotoKeys.DATE_TAKEN)
                 .limit(limit, offset)
         };
@@ -109,7 +111,7 @@ class PhotoAssetsManagerImpl {
                 photoAccessHelper.PhotoKeys.URI,
                 photoAccessHelper.PhotoKeys.DATE_TAKEN,
                 photoAccessHelper.PhotoKeys.DISPLAY_NAME,
-                photoAccessHelper.PhotoKeys.OWNER_ALBUM_ID,
+                OWNER_ALBUM_ID,
             ],
             predicates: new dataSharePredicates.DataSharePredicates()
                 .orderByDesc(photoAccessHelper.PhotoKeys.DATE_TAKEN)
@@ -120,7 +122,7 @@ class PhotoAssetsManagerImpl {
             let result = await NCommon.pHelper.getAssets(FETCH_OPTIONS);
             while (!result.isAfterLast()) {
                 const photoItem = await result.getNextObject();
-                const albumId = photoItem.get(photoAccessHelper.PhotoKeys.OWNER_ALBUM_ID) as number;
+                const albumId = photoItem.get(OWNER_ALBUM_ID) as number;
                 if (!albums.includes(albumId)) {
                     albums.push(albumId);
                     const displayName = photoItem.get(photoAccessHelper.PhotoKeys.DISPLAY_NAME);
@@ -140,11 +142,15 @@ class PhotoAssetsManagerImpl {
         if (category) {
             category.tryAddAsset(photoItem, addPosition);
 
-            let account = Nextcloud.getAllAccounts()[0];
-            let remoteFolderId = account.dbAccount.config.instantUploadFolderId;
-            let remoteFolder = await Nextcloud.getSyncFolderManager().getRemoteFolderById(remoteFolderId);
-            Logger.Info(TAG, `instant upload remote dir: ${remoteFolderId}`);
-            photoItem.getUploadJob(category.name, remoteFolder!).start();
+            if (category.localFolder.dbLocalFolder.config.instantUploadEnabled) {
+                let account = Nextcloud.getAllAccounts()[0];
+                let remoteFolderId = account.dbAccount.config.instantUploadFolderId;
+                let remoteFolder = await Nextcloud.getSyncFolderManager().getRemoteFolderById(remoteFolderId);
+                Logger.Info(TAG, `instant upload remote dir: ${remoteFolderId}`);
+                photoItem.getUploadJob(category.name, remoteFolder!).start();
+            } else {
+                Logger.Warn(TAG, `instant upload not enabled for category ${category.name}, skipping ${photoItem.displayName}`);
+            }
         } else {
             Logger.Error(TAG, `add new category for ${ownerAlbumId} failed`);
         }

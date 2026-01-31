@@ -1,6 +1,9 @@
 /**
  * Nextcloud module entry point
  */
+export { LocalFolder } from './Database/Types/LocalFolder';
+
+export { RemoteFolder } from './Database/Types/RemoteFolder';
 
 export { SyncConfiguration } from './Database/Types/SyncConfiguration';
 

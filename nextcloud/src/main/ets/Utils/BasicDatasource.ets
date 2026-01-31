@@ -26,6 +26,11 @@ export class BasicDataSource<T> implements IDataSource {
         this.notifyDataAdd(this.entries.length - 1);
     }
 
+    public clear() {
+        this.entries.length = 0;
+        this.notifyDataReload();
+    }
+
     registerDataChangeListener(listener: DataChangeListener): void {
         if (this.listeners.indexOf(listener) < 0) {
             this.listeners.push(listener);

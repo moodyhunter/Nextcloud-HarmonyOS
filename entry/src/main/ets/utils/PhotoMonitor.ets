@@ -1,6 +1,6 @@
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { Logger, NCommon, PhotoAssetsManager } from 'nextcloud';
-import { NotificationManager } from './NotificationManager';
+import { Notification } from './NotificationManager';
 
 const TAG = 'Utils-PhotoMonitor';
 
@@ -74,7 +74,7 @@ class PhotoMonitorImpl {
         }, PhotoMonitorImpl.UPLOAD_DELAY_MS);
 
         let nextUploadTime = new Date(Date.now() + PhotoMonitorImpl.UPLOAD_DELAY_MS);
-        NotificationManager.publishNotification('nextUploadTime', '1', 1);
+        // Notification.publishNotification('nextUploadTime', '1', 1);
         Logger.Info(TAG, `+++ Scheduled upload at ${nextUploadTime}`);
     }
 }

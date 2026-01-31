@@ -1,5 +1,8 @@
 export const INSTANT_UPLOAD_PATH = '/InstantUpload/';
 
-export class GlobalStorage {
-    public static SandboxBasePath: string = "";
+@ObservedV2
+class GlobalStorageImpl {
+    @Trace public SandboxBasePath: string = "";
 }
+
+export const GlobalStorage = new GlobalStorageImpl();

@@ -2,11 +2,13 @@ import { RemoteFolder } from '../../Database/Types/RemoteFolder';
 import { Logger } from '../../Utils/Logger';
 import { CreateSession } from '../../webdav/TransferUtils';
 import {
-    publishTransferEvent, TransferManagerEventCode, TransferType
+    publishTransferEvent,
+    TransferManagerEventCode,
+    TransferType,
 } from '../TransferManagerEventIPC';
 import { BaseJob, JobData } from './BaseJob';
 import { rcp } from '@kit.RemoteCommunicationKit';
-
+//
 export interface TransferJobData extends JobData {
     fileName: string;
 
@@ -19,8 +21,8 @@ export interface TransferJobData extends JobData {
 @ObservedV2
 export class TransferJob extends BaseJob {
     readonly id: number;
-    @Trace public readonly type: TransferType;
-    @Trace public readonly filename: string;
+    public readonly type: TransferType;
+    public readonly filename: string;
     @Trace public totalSize: number = 1;
     @Trace public transferredSize: number = 0;
     @Trace public remoteFolder: RemoteFolder;

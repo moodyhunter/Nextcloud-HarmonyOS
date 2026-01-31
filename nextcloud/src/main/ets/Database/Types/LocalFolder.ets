@@ -1,7 +1,5 @@
 import { DBLocalFolder, LocalFolderType } from '../DbTypes/DBLocalFolder';
 
-export interface LocalFolderItem {}
-
 export class LocalFolder {
     private dbLocalFolder_: DBLocalFolder;
 
