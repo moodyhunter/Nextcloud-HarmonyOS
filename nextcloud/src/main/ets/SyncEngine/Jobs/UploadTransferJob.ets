@@ -5,7 +5,6 @@ import { Logger } from '../../Utils/Logger';
 import { rcp } from '@kit.RemoteCommunicationKit';
 import { TransferType } from '../TransferManagerEventIPC';
 import { NCommon } from '../../Common';
-
 export interface UploadCallback {
     jobCreated,
     aboutToUpload,
@@ -82,63 +81,88 @@ export class UploadTransferJob extends TransferJob {
             }
         }
 
-        const tempDirectory = NCommon.RandomString(16);
-        const chunkedUploadRemoteDir = account.chunkedUploadBaseUrl() + tempDirectory + `/`;
-        session.configuration!.headers!['Destination'] = account.remoteBaseDirUrl() + destFile;
+        if (this.fileStat.size <= DEFAULT_CHUNK_SIZE) {
+            Logger.Info(this.TAG, `begin regular upload`);
 
-        try {
-            let resp = await session.fetch(new rcp.Request(chunkedUploadRemoteDir, "MKCOL", {}));
-            Logger.Info(this.TAG, `Created chunked upload temp directory '${tempDirectory}' with response: ${resp.statusCode}`);
-            if (resp.statusCode !== 201) {
-                throw new Error(`Failed to create chunked upload temp directory, status code: ${resp.statusCode}`);
-            }
-        } catch (e) {
-            Logger.Error(this.TAG, `failed to create chunked upload temp directory '${tempDirectory}': ${e}`);
-            await session.delete(chunkedUploadRemoteDir);
-            await fileIo.close(this.file.fd);
-            throw e as Error;
-        }
+            try {
+                let arrayBuffer = new ArrayBuffer(this.fileStat.size);
+                let readLen = await fileIo.read(this.file.fd, arrayBuffer, { length: this.fileStat.size });
 
-        let remainingSize = this.fileStat.size;
-        session.configuration!.headers!['OC-Total-Length'] = `${this.fileStat.size}`;
-        try {
-            let fileCount = 0;
-            for (let uploadedSize = 0; uploadedSize < this.fileStat.size; ) {
-                let chunkSize = Math.min(remainingSize, DEFAULT_CHUNK_SIZE);
-                let arrayBuffer = new ArrayBuffer(chunkSize);
-                let readLen = await fileIo.read(this.file.fd, arrayBuffer, {
-                    length: chunkSize,
-                    offset: uploadedSize
-                });
+                let remotePath = account.remoteBaseDirUrl() + destFile;
+                Logger.Info(this.TAG, `Read ${readLen} bytes into ArrayBuffer for upload to ${remotePath}`);
 
-                let chunkPath = chunkedUploadRemoteDir + fileCount.toString().padStart(5, '0');
-                Logger.Info(this.TAG, `Read ${readLen} bytes into ArrayBuffer for chunked upload to ${chunkPath}`);
-
-                let resp = await session.put(chunkPath, arrayBuffer);
-                Logger.Info(this.TAG, `Chunk upload response for ${chunkPath}: ${resp.statusCode}`);
+                let resp = await session.put(remotePath, arrayBuffer);
+                Logger.Info(this.TAG, `upload response for ${remotePath}: ${resp.statusCode}`);
 
                 if (resp.statusCode !== 201 && resp.statusCode !== 204) {
-                    throw new Error(`Chunk upload failed with status code: ${resp.statusCode}`);
+                    throw new Error(`upload failed with status code: ${resp.statusCode}`);
                 }
+                this.uploadStatusCode = resp.statusCode;
+            }
+            catch (e) {
+                Logger.Error(this.TAG, `upload failed: ${JSON.stringify(e)}`);
+                throw e as Error;
+            }
+        } else {
+            Logger.Info(this.TAG, `begin chunked upload`);
+            const tempDirectory = NCommon.RandomString(16);
+            const chunkedUploadRemoteDir = account.chunkedUploadBaseUrl() + tempDirectory + `/`;
+            session.configuration!.headers!['Destination'] = account.remoteBaseDirUrl() + destFile;
 
-                uploadedSize += readLen;
-                remainingSize -= readLen;
-                fileCount++;
-                this.historicalBatchesTransferredSize = uploadedSize;
+            try {
+                let resp = await session.fetch(new rcp.Request(chunkedUploadRemoteDir, "MKCOL", {}));
+                Logger.Info(this.TAG, `Created chunked upload temp directory '${tempDirectory}' with response: ${resp.statusCode}`);
+                if (resp.statusCode !== 201) {
+                    throw new Error(`Failed to create chunked upload temp directory, status code: ${resp.statusCode}`);
+                }
+            } catch (e) {
+                Logger.Error(this.TAG, `failed to create chunked upload temp directory '${tempDirectory}': ${e}`);
+                await session.delete(chunkedUploadRemoteDir);
+                await fileIo.close(this.file.fd);
+                throw e as Error;
             }
-            // Finalize chunked upload
-            let moveRequest = new rcp.Request(chunkedUploadRemoteDir + '.file', "MOVE", {});
-            let resp = await session.fetch(moveRequest);
-            Logger.Info(this.TAG, `Finalized chunked upload with response: ${resp.statusCode}`);
-            if (resp.statusCode !== 201 && resp.statusCode !== 204) {
-                throw new Error(`Finalizing chunked upload failed with status code: ${resp.statusCode}`);
+
+            let remainingSize = this.fileStat.size;
+            session.configuration!.headers!['OC-Total-Length'] = `${this.fileStat.size}`;
+            try {
+                let fileCount = 0;
+                for (let uploadedSize = 0; uploadedSize < this.fileStat.size;) {
+                    let chunkSize = Math.min(remainingSize, DEFAULT_CHUNK_SIZE);
+                    let arrayBuffer = new ArrayBuffer(chunkSize);
+                    let readLen = await fileIo.read(this.file.fd, arrayBuffer, {
+                        length: chunkSize,
+                        offset: uploadedSize
+                    });
+
+                    let chunkPath = chunkedUploadRemoteDir + fileCount.toString().padStart(5, '0');
+                    Logger.Info(this.TAG, `Read ${readLen} bytes into ArrayBuffer for chunked upload to ${chunkPath}`);
+
+                    let resp = await session.put(chunkPath, arrayBuffer);
+                    Logger.Info(this.TAG, `Chunk upload response for ${chunkPath}: ${resp.statusCode}`);
+
+                    if (resp.statusCode !== 201 && resp.statusCode !== 204) {
+                        throw new Error(`Chunk upload failed with status code: ${resp.statusCode}`);
+                    }
+
+                    uploadedSize += readLen;
+                    remainingSize -= readLen;
+                    fileCount++;
+                    this.historicalBatchesTransferredSize = uploadedSize;
+                }
+                // Finalize chunked upload
+                let moveRequest = new rcp.Request(chunkedUploadRemoteDir + '.file', "MOVE", {});
+                let resp = await session.fetch(moveRequest);
+                Logger.Info(this.TAG, `Finalized chunked upload with response: ${resp.statusCode}`);
+                if (resp.statusCode !== 201 && resp.statusCode !== 204) {
+                    throw new Error(`Finalizing chunked upload failed with status code: ${resp.statusCode}`);
+                }
+                this.uploadStatusCode = resp.statusCode;
+            } catch (e) {
+                await session.delete(chunkedUploadRemoteDir);
+                Logger.Error(this.TAG, `chunked upload failed: ${e}`);
+            } finally {
+                await fileIo.close(this.file.fd);
             }
-            this.uploadStatusCode = resp.statusCode;
-        } catch (e) {
-            await session.delete(chunkedUploadRemoteDir);
-            Logger.Error(this.TAG, `chunked upload failed: ${e}`);
-        } finally {
-            await fileIo.close(this.file.fd);
         }
     }
 }

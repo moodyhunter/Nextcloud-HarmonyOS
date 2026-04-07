@@ -131,11 +131,9 @@ export class Category {
                 continuesExistance = 0;
                 photoItem.uploadStatus = UploadStatus.Pending;
                 let job = photoItem.getUploadJob(this.name, remoteFolder);
-                jobs.push(job.start());
+                await job.start();
             }
         }
-
-        await Promise.all(jobs);
     }
 
     private matchesAsset(asset: PhotoItem): boolean {
