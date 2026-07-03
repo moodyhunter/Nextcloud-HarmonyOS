@@ -119,32 +119,35 @@ export struct SettingsPage {
                             .fontSize($r('sys.float.subheader_title_font_size'))
                             .margin({ bottom: 4 })
 
-                        Repeat(this.categories).each((item: RepeatItem<Category>) => {
-                            Row() {
-                                Column() {
-                                    Text(item.item.name)
-                                    Text(`Album ${item.item.localFolder.albumId}`)
-                                }
-                                .alignItems(HorizontalAlign.Start)
+                        Repeat(this.categories)
+                            .each((item: RepeatItem<Category>) => {
+                                Row() {
+                                    Column() {
+                                        Text(item.item.name)
+                                        Text(`Album Id: ${item.item.localFolder.albumId}`)
+                                            .fontSize(10)
+                                    }
+                                    .alignItems(HorizontalAlign.Start)
 
-                                Row({ space: 8 }) {
-                                    Text('Upload')
-                                    Toggle({ type: ToggleType.Switch, isOn: item.item.instantUploadEnabled })
-                                        .onChange((value: boolean) => {
-                                            item.item.instantUploadEnabled = value;
-                                            Nextcloud.getSyncFolderManager().updateLocalFolder(item.item.localFolder);
-                                        })
-                                        .height('60px')
-                                        .width('107px')
+                                    Row({ space: 8 }) {
+                                        Text('Upload')
+                                        Toggle({ type: ToggleType.Switch, isOn: item.item.instantUploadEnabled })
+                                            .onChange((value: boolean) => {
+                                                item.item.instantUploadEnabled = value;
+                                                Nextcloud.getSyncFolderManager()
+                                                    .updateLocalFolder(item.item.localFolder);
+                                            })
+                                            .height('60px')
+                                            .width('107px')
+                                    }
+                                    .alignItems(VerticalAlign.Center)
                                 }
-                                .alignItems(VerticalAlign.Center)
-                            }
-                            .justifyContent(FlexAlign.SpaceBetween)
-                            .width('100%')
-                            .backgroundColor($r('sys.color.gray_03'))
-                            .borderRadius(8)
-                            .padding(12)
-                        })
+                                .justifyContent(FlexAlign.SpaceBetween)
+                                .width('100%')
+                                .backgroundColor($r('sys.color.gray_03'))
+                                .borderRadius(8)
+                                .padding(12)
+                            })
                     }
                     .padding(12)
                     .backgroundColor($r('sys.color.gray_02'))
@@ -169,7 +172,8 @@ export struct SettingsPage {
                 .onClick(async () => {
                     await Nextcloud.recreateDatabase();
                     try {
-                        await application.getApplicationContext().killAllProcesses();
+                        await application.getApplicationContext()
+                            .killAllProcesses();
                     } catch (error) {
                         Logger.Error(TAG, `failed to kill all processes: ${JSON.stringify(error)}`);
                     }

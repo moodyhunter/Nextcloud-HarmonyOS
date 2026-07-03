@@ -71,7 +71,15 @@ class PhotoAssetsManagerImpl {
         const sfm = Nextcloud.getSyncFolderManager();
         const albums = await this.getAllCategories();
         for (let albumId of albums) {
-            if (!this.categories.has(albumId)) {
+            if (this.categories.has(albumId)) {
+                const category = this.categories.get(albumId)!;
+                if (category.name === `Album ${albumId}`) {
+                    const albumName = await this.getAlbumNameById(albumId);
+                    Logger.Warn(TAG, `updating ${albumId} name --> ${albumName}`);
+                    category.localFolder.alias = albumName;
+                    sfm.updateLocalFolder(category.localFolder);
+                }
+            } else {
                 Logger.Warn(TAG, `initialize: found new AlbumId: ${albumId}`);
                 let localFolder = await sfm.addLocalAlbumFolder(albumId, `Album ${albumId}`);
                 this.categories.set(localFolder.albumId, new Category(localFolder));
@@ -136,6 +144,21 @@ class PhotoAssetsManagerImpl {
         return albums;
     }
 
+    private async getAlbumNameById(albumId: number): Promise<string> {
+        const ALBUM_URI_PREFIX = 'file://media/PhotoAlbum/';
+        let result = await NCommon.pHelper.getAlbums(2048, 2049);
+
+        const allAlbums = await result.getAllObjects();
+
+        for (const album of allAlbums) {
+            if (album.albumUri === (ALBUM_URI_PREFIX + albumId)) {
+                return album.albumName;
+            }
+        }
+        Logger.Warn(TAG, `getAlbumNameById: album id: ${albumId} not found!`);
+        return '<none>';
+    }
+
     private async doAddPhotoItem(photoItem: PhotoItem, addPosition: AddPosition) {
         let ownerAlbumId = photoItem.ownerAlbumId;
         let category = this.categories.get(ownerAlbumId);
@@ -145,11 +168,14 @@ class PhotoAssetsManagerImpl {
             if (category.localFolder.dbLocalFolder.config.instantUploadEnabled) {
                 let account = Nextcloud.getAllAccounts()[0];
                 let remoteFolderId = account.dbAccount.config.instantUploadFolderId;
-                let remoteFolder = await Nextcloud.getSyncFolderManager().getRemoteFolderById(remoteFolderId);
+                let remoteFolder = await Nextcloud.getSyncFolderManager()
+                    .getRemoteFolderById(remoteFolderId);
                 Logger.Info(TAG, `instant upload remote dir: ${remoteFolderId}`);
-                photoItem.getUploadJob(category.name, remoteFolder!).start();
+                photoItem.getUploadJob(category.name, remoteFolder!)
+                    .start();
             } else {
-                Logger.Warn(TAG, `instant upload not enabled for category ${category.name}, skipping ${photoItem.displayName}`);
+                Logger.Warn(TAG,
+                    `instant upload not enabled for category ${category.name}, skipping ${photoItem.displayName}`);
             }
         } else {
             Logger.Error(TAG, `add new category for ${ownerAlbumId} failed`);
