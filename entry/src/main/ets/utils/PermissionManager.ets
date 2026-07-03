@@ -1,47 +1,70 @@
 import { abilityAccessCtrl, bundleManager, Permissions } from '@kit.AbilityKit';
-import { BusinessError } from '@kit.BasicServicesKit';
 import { Logger } from 'nextcloud';
+import { UIContext } from '@ohos.arkui.UIContext';
 
 const TAG = 'utils/PermissionManager';
 
 export class PermissionManager {
-    static async RequestPermission(context: Context, permission: Permissions): Promise<boolean> {
+    static async RequestPermission(context: UIContext, perms: Permissions[]): Promise<boolean> {
         let atManager: abilityAccessCtrl.AtManager = abilityAccessCtrl.createAtManager();
+        Logger.Warn(TAG, `requestPermission for permissions: ${perms}`);
 
-        if (await PermissionManager.verifyPermission(permission)) {
-            Logger.Info(TAG, `requestPermission success, permissionName->${permission}`);
+        let toGrant = await PermissionManager.getPermissionsToGrant(atManager, perms);
+        if (toGrant.length === 0) {
+            Logger.Info(TAG, `requestPermission success, all permissions already granted`);
             return true;
         }
 
-        let result = await atManager.requestPermissionsFromUser(context, [permission]);
+        let result = await atManager.requestPermissionsFromUser(context.getHostContext()!, toGrant);
 
+        let leftoverPermissions: Permissions[] = [];
         for (let i = 0; i < result.permissions.length; i++) {
             let rPerm = result.permissions[i];
             let rResult = result.authResults[i];
-
-            if (rPerm == permission && rResult == abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
-                Logger.Info(TAG, `requestPermission success, permissionName->${permission}`);
-                return true;
+            let isGranted = rResult == abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;
+            if (!isGranted) {
+                leftoverPermissions.push(rPerm as Permissions);
             }
         }
 
-        Logger.Warn(TAG, `requestPermission fail, ${permission}, requesting to open settings`);
-        await AlertDialog.show({ message: '请开启权限' });
-        await atManager.requestPermissionOnSetting(context, [permission]);
+        if (leftoverPermissions.length == 0) {
+            Logger.Info(TAG, `requestPermission success: ${toGrant}`);
+            return true;
+        }
+
+        Logger.Warn(TAG, `requestPermission fail, ${leftoverPermissions}, requesting to open settings`);
+        context.showAlertDialog({ message: '需要开启权限才能使用全部功能' });
+        await atManager.requestPermissionOnSetting(context.getHostContext()!, leftoverPermissions);
         return false;
     }
 
-    private static async verifyPermission(permission: Permissions): Promise<boolean> {
-        let atManager: abilityAccessCtrl.AtManager = abilityAccessCtrl.createAtManager();
-        let tokenID: number = (await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION))
-            .appInfo
-            .accessTokenId;
-        let result: boolean = false;
-        await atManager.verifyAccessToken(tokenID, permission).then((data: abilityAccessCtrl.GrantStatus) => {
-            result = data == abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;
-        }).catch((err: BusinessError) => {
-            Logger.Error(TAG, `verifyPermission fail, err->${JSON.stringify(err)}`);
-        });
-        return result;
+    /**
+     * Verify if the permission is granted
+     * @param permission
+     * @returns Promise<Permissions[]> permissions that are NOT granted
+     */
+    private static async getPermissionsToGrant(atManager: abilityAccessCtrl.AtManager, permission: Permissions[]): Promise<Permissions[]> {
+        let bundleInfo = await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION);
+
+        let verifySinglePermission = async (perm: Permissions): Promise<boolean> => {
+            try {
+                let grantStatus = await atManager.verifyAccessToken(bundleInfo.appInfo.accessTokenId, perm);
+                Logger.Debug(TAG, `verifyPermission for ${perm}, grantStatus: ${grantStatus}`);
+                return grantStatus == abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;
+            } catch (error) {
+                Logger.Error(TAG, `verifyPermission exception for ${perm}, err->${JSON.stringify(error)}`);
+                return false;
+            }
+        };
+
+        let notGrantedPermissions: Permissions[] = [];
+        for (let perm of permission) {
+            if (!await verifySinglePermission(perm)) {
+                notGrantedPermissions.push(perm);
+            }
+        }
+
+        Logger.Info(TAG, `verifyPermission, not granted permissions: ${notGrantedPermissions}`);
+        return notGrantedPermissions;
     }
 }

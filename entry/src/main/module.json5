@@ -9,6 +9,15 @@
         "name": "ohos.permission.INTERNET"
       },
       {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING_SYSTEM",
+        "reason": "$string:permission_media_location_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ]
+        }
+      },
+      {
         "name": "ohos.permission.READ_IMAGEVIDEO",
         "reason": "$string:permission_image_video_reason",
         "usedScene": {
@@ -25,6 +34,15 @@
             "EntryAbility"
           ]
         }
+      },
+      {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
+      },
+      {
+        "name": "ohos.permission.FILE_ACCESS_PERSIST"
+      },
+      {
+        "name": "ohos.permission.PREPARE_APP_TERMINATE"
       }
     ],
     "deviceTypes": [
@@ -55,6 +73,9 @@
               "action.system.home"
             ]
           }
+        ],
+        "backgroundModes": [
+          "taskKeeping"
         ]
       }
     ],
@@ -69,7 +90,14 @@
             "name": "ohos.extension.backup",
             "resource": "$profile:backup_config"
           }
-        ],
+        ]
+      },
+      {
+        "name": "StatusBarAbility",
+        "srcEntry": "./ets/statusbar/StatusBarAbility.ets",
+        "icon": "$media:layered_image",
+        "type": "statusBarView",
+        "exported": true
       }
     ]
   }

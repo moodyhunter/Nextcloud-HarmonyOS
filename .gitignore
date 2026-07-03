@@ -13,3 +13,5 @@ node_modules
 /.clang-tidy
 **/.test
 /.appanalyzer
+
+.bitfun/

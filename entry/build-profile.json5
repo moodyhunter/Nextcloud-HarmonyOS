@@ -1,10 +1,22 @@
 {
   "apiType": "stageMode",
   "buildOption": {
+    "resOptions": {},
+    "externalNativeOptions": {
+      "path": "src/main/cpp/CMakeLists.txt",
+      "cppFlags": "",
+      "arguments": ""
+    }
   },
   "buildOptionSet": [
     {
       "name": "release",
+      "nativeLib": {
+        "debugSymbol": {
+          "strip": true,
+          "exclude": []
+        }
+      },
       "arkOptions": {
         "obfuscation": {
           "ruleOptions": {
@@ -15,11 +27,11 @@
           }
         }
       }
-    },
+    }
   ],
   "targets": [
     {
-      "name": "default",
-    },
+      "name": "default"
+    }
   ]
 }

@@ -1,31 +1,31 @@
-import { Logger, NCommon } from 'nextcloud';
+import {
+    Account, Logger, NCommon, Nextcloud, LocalFolder, LocalFolderType, Category,
+    PhotoAssetsManager
+} from 'nextcloud';
 import { LengthMetrics } from '@kit.ArkUI';
+import application from '@ohos.app.ability.application';
+import { ShowToast } from '../utils/Utils';
 
 const TAG = 'pages/Settings';
-
-@Observed
-class EditableCategory implements NCommon.CategoryConfig {
-    name: string;
-    patterns: string[];
-    location: string;
-
-    constructor(other: NCommon.CategoryConfig) {
-        this.name = other.name;
-        this.patterns = other.patterns;
-        this.location = other.location;
-    }
-}
 
 @Component
 export struct SettingsPage {
     scroller: Scroller = new Scroller();
+    @ObjectLink public currentAccount: Account;
     @State private username: string = "<username>";
     @State private hostname: string = "<hostname>";
     @State private uploadReplaceExisting: boolean = false;
     @State private uploadBaseDirectory: string = '/';
-    @State private uploadCategories: EditableCategory[] = [];
 
+    private categories: Category[] = [];
     aboutToAppear(): void {
+        this.categories = Array.from(PhotoAssetsManager.categories.values());
+        this.categories.sort((a: Category, b: Category): number => {
+            if (a.instantUploadEnabled !== b.instantUploadEnabled) {
+                return a.instantUploadEnabled ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+        })
         this.doLoadSettings();
     }
 
@@ -40,11 +40,12 @@ export struct SettingsPage {
 
             Scroll(this.scroller) {
                 Flex({ direction: FlexDirection.Column }) {
-                    Column({ space: 4 }) {
+                    Column() {
                         Text($r('app.string.login_info'))
                             .width('100%')
                             .fontSize($r('sys.float.subheader_title_font_size'))
                             .fontWeight(FontWeight.Bold)
+                            .margin({ bottom: 4 })
 
                         Row() {
                             Text($r('app.string.username'))
@@ -64,15 +65,19 @@ export struct SettingsPage {
                         .width('100%')
                         .height(24)
                     }
+                    .backgroundColor($r('sys.color.gray_02'))
+                    .borderRadius(8)
+                    .padding(12)
 
                     Divider()
                         .margin({ top: 16, bottom: 16 })
 
-                    Column({ space: 4 }) {
+                    Column() {
                         Text($r('app.string.upload'))
                             .width('100%')
                             .fontWeight(FontWeight.Bold)
                             .fontSize($r('sys.float.subheader_title_font_size'))
+                            .margin({ bottom: 4 })
 
                         Row() {
                             Text($r('app.string.upload_base_directory'))
@@ -100,45 +105,55 @@ export struct SettingsPage {
                         .width('100%')
                         .height(24)
                     }
+                    .backgroundColor($r('sys.color.gray_02'))
+                    .borderRadius(8)
+                    .padding(12)
 
                     Divider()
                         .margin({ top: 16, bottom: 16 })
 
-                    Column({ space: 4 }) {
+                    Column({ space: 8 }) {
                         Text($r('app.string.categories'))
                             .width('100%')
                             .fontWeight(FontWeight.Bold)
                             .fontSize($r('sys.float.subheader_title_font_size'))
+                            .margin({ bottom: 4 })
 
-                        ForEach(this.uploadCategories, (category: EditableCategory, index: number) => {
-                            Column({ space: 4 }) {
+                        Repeat(this.categories)
+                            .each((item: RepeatItem<Category>) => {
                                 Row() {
-                                    Text(category.name)
-                                        .fontWeight(FontWeight.Bold)
+                                    Column() {
+                                        Text(item.item.name)
+                                        Text(`Album Id: ${item.item.localFolder.albumId}`)
+                                            .fontSize(10)
+                                    }
+                                    .alignItems(HorizontalAlign.Start)
 
-                                    Text(this.uploadBaseDirectory + category.location)
-                                        .fontSize(12)
-                                        .fontColor(Color.Gray)
+                                    Row({ space: 8 }) {
+                                        Text('Upload')
+                                        Toggle({ type: ToggleType.Switch, isOn: item.item.instantUploadEnabled })
+                                            .onChange((value: boolean) => {
+                                                item.item.instantUploadEnabled = value;
+                                                Nextcloud.getSyncFolderManager()
+                                                    .updateLocalFolder(item.item.localFolder);
+                                            })
+                                            .height('60px')
+                                            .width('107px')
+                                    }
+                                    .alignItems(VerticalAlign.Center)
                                 }
                                 .justifyContent(FlexAlign.SpaceBetween)
                                 .width('100%')
-
-                                ForEach(category.patterns, (pattern: string, patternIndex: number) => {
-                                    TextInput({ text: pattern })
-                                        .fontSize(12)
-                                        .fontFamily('monospace')
-                                        .width('100%')
-                                        .onChange((content) => {
-                                            category.patterns[patternIndex] = content;
-                                        })
-                                })
-                            }
-                            .width('100%')
-                            .padding(8)
-                        })
+                                .backgroundColor($r('sys.color.gray_03'))
+                                .borderRadius(8)
+                                .padding(12)
+                            })
                     }
+                    .padding(12)
+                    .backgroundColor($r('sys.color.gray_02'))
+                    .borderRadius(8)
                 }
-                .margin({ left: 24, right: 24 })
+                .margin({ left: 16, right: 16 })
             }
             .align(Alignment.TopStart)
             .edgeEffect(EdgeEffect.Spring)
@@ -147,25 +162,34 @@ export struct SettingsPage {
             Button($r('app.string.save_settings'), { stateEffect: true })
                 .onClick(() => {
                     this.doSaveSettings();
-                    this.getUIContext().getPromptAction().showToast({
-                        message: 'settings saved'
-                    });
+                    ShowToast(this.getUIContext(), 'settings saved');
                 })
                 .margin({ top: 16, bottom: 16 })
+
+            Button('DROP DATABASE')
+                .visibility(Visibility.None)
+                .backgroundColor(Color.Red)
+                .onClick(async () => {
+                    await Nextcloud.recreateDatabase();
+                    try {
+                        await application.getApplicationContext()
+                            .killAllProcesses();
+                    } catch (error) {
+                        Logger.Error(TAG, `failed to kill all processes: ${JSON.stringify(error)}`);
+                    }
+                })
         }
+        .background($r('sys.color.background_primary'))
         .height('100%')
+        .padding({ bottom: 16 })
     }
 
     private doLoadSettings() {
         if (NCommon.Preference) {
-            this.username = NCommon.Preference.username;
-            this.hostname = NCommon.Preference.hostname;
+            this.username = this.currentAccount.username;
+            this.hostname = this.currentAccount.hostname;
             this.uploadReplaceExisting = NCommon.Preference.replaceExistingFiles;
             this.uploadBaseDirectory = NCommon.Preference.baseUploadDirectory;
-            this.uploadCategories = [];
-            for (let c of NCommon.Preference.categories) {
-                this.uploadCategories.push(new EditableCategory(c));
-            }
         } else {
             Logger.Error(TAG, `failed to load settings, preference is undefined`);
         }
@@ -173,11 +197,8 @@ export struct SettingsPage {
 
     private doSaveSettings() {
         if (NCommon.Preference) {
-            NCommon.Preference.username = this.username;
-            NCommon.Preference.hostname = this.hostname;
             NCommon.Preference.replaceExistingFiles = this.uploadReplaceExisting;
             NCommon.Preference.baseUploadDirectory = this.uploadBaseDirectory;
-            NCommon.Preference.categories = this.uploadCategories;
         } else {
             Logger.Error(TAG, `failed to save settings, preference is undefined`);
         }

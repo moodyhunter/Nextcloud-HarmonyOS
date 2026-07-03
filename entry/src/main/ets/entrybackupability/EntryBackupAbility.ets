@@ -5,9 +5,7 @@ import { Logger, NCommon } from 'nextcloud';
 const TAG = 'entry/Backup';
 
 interface BackupContentV1 {
-    server: string;
-    username: string;
-    appPassword: string;
+    nothing: 'to backup';
 }
 
 interface BackupObject {
@@ -20,9 +18,7 @@ export default class EntryBackupAbility extends BackupExtensionAbility {
         let object: BackupObject = {
             version: 1,
             settings: {
-                server: NCommon.Preference.hostname,
-                username: NCommon.Preference.username,
-                appPassword: NCommon.Preference.password
+                nothing: 'to backup'
             }
         };
         let jsonString = JSON.stringify(object);
@@ -49,9 +45,6 @@ export default class EntryBackupAbility extends BackupExtensionAbility {
         }
 
         let object: BackupObject = JSON.parse(data);
-        NCommon.Preference.hostname = object.settings.server;
-        NCommon.Preference.username = object.settings.username;
-        NCommon.Preference.password = object.settings.appPassword;
         Logger.Info(TAG, `onRestore completed with data: ${JSON.stringify(object)}`);
 
         file.close();

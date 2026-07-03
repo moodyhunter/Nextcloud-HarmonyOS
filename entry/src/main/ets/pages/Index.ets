@@ -1,23 +1,30 @@
-import { Logger, NCommon } from 'nextcloud';
+import { Account, Logger, Nextcloud } from 'nextcloud';
 import { App, promptAction } from '@kit.ArkUI';
 import { Path } from '../utils/Path';
 import { UploadPage } from './UploadPage';
 import { LoginPage } from './LoginPage';
 import { SettingsPage } from './SettingsPage';
 import { FolderPage } from './FolderPage';
-import { Constants, FolderViewMode } from '../utils/Common';
+import { PermissionManager } from '../utils/PermissionManager';
+import { PhotoAssetsManager } from 'nextcloud/src/main/ets/SyncEngine/PhotoAssetsManager';
+import { PhotoMonitor } from '../utils/PhotoMonitor';
+import { ShowToast } from '../utils/Utils';
+import { Permissions } from '@kit.AbilityKit';
+import { TransferProgress } from './TransferProgress';
 
 const TAG = "Page-Index";
 
 const EXIT_TOAST_DURATION: number = 2000;
 
 @Entry
-@Component
+@ComponentV2
 struct Index {
-    @State currentIndex: number = 0;
-    @StorageLink(Constants.VIEW_MODE_KEY) viewMode: FolderViewMode = FolderViewMode.TwoColumns;
-    @Provide('FolderList.PathStack') pathStack: NavPathStack = new NavPathStack();
-    @State private loginPageDialogId: number = 0;
+    @Local currentIndex: number = 0;
+    // @StorageLink(Constants.VIEW_MODE_KEY) viewMode: FolderViewMode = FolderViewMode.TwoColumns;
+    @Provider('FolderList.PathStack') pathStack: NavPathStack = new NavPathStack();
+    private readonly activeAccountId: number = 0;
+    @Local private readonly account: Account = Nextcloud.getAccountById(this.activeAccountId);
+    @Local private loginPageDialogId: number = 0;
     private backedOnce: boolean = false;
 
     onBackPress(): boolean {
@@ -38,32 +45,34 @@ struct Index {
                 this.backedOnce = false;
             }, EXIT_TOAST_DURATION);
 
-            try {
-                this.getUIContext().getPromptAction().showToast({
-                    message: $r('app.string.swipe_back_again_to_exit'),
-                    duration: EXIT_TOAST_DURATION,
-                });
-            } catch (error) {
-                Logger.Error(TAG, `Failed to show toast?`);
-            }
+            ShowToast(this.getUIContext(), $r('app.string.swipe_back_again_to_exit'), EXIT_TOAST_DURATION);
             return true;
         }
     }
 
-    aboutToAppear(): void {
+    async aboutToAppear() {
         Logger.Info(TAG, `aboutToAppear`);
+        let context = this.getUIContext();
+        const PERMISSIONS: Permissions[] = [
+            'ohos.permission.READ_IMAGEVIDEO',
+            'ohos.permission.MEDIA_LOCATION',
+        ];
+        let result = await PermissionManager.RequestPermission(context, PERMISSIONS);
+        Logger.Info(TAG, `Request permission result: ${result}`);
+        PhotoMonitor.beginMonitorPhotoChange();
     }
 
     async doLogin() {
+        let context = this.getUIContext();
+        let options: promptAction.CustomDialogOptions = {
+            builder: () => {
+                return this.LoginPageDialog();
+            },
+            isModal: true,
+            autoCancel: false,
+        };
+
         try {
-            let context = this.getUIContext();
-            let options: promptAction.CustomDialogOptions = {
-                builder: () => {
-                    this.LoginPageDialog()
-                },
-                isModal: true,
-                autoCancel: false,
-            };
             this.loginPageDialogId = await context.getPromptAction().openCustomDialog(options);
             Logger.Info(TAG, `done`);
         } catch (error) {
@@ -76,7 +85,7 @@ struct Index {
         App.setImageRawDataCacheSize(1024 * 1024 * 100); // 100MB
         App.setImageFileCacheSize(1024 * 1024 * 500); // 100MB
 
-        if (!NCommon.Preference.hasLogon()) {
+        if (!Nextcloud.hasAccounts()) {
             this.doLogin();
         }
     }
@@ -86,41 +95,47 @@ struct Index {
             TabContent() {
                 Flex({ direction: FlexDirection.Column }) {
                     Navigation(this.pathStack) {
-                        FolderPage({ currentPath: new Path() })
+                        FolderPage({ account: this.account, currentPath: new Path() })
                     }
                     .navBarWidth(0)
                     .mode(NavigationMode.Stack)
-
-                    Row({ space: 10 }) {
-                        Button(FolderViewMode[this.viewMode])
-                            .onClick(() => {
-                                this.viewMode = (this.viewMode % 3) + 1;
-                            })
-                            .width(100)
-                    }
-                    .width('100%')
-                    .alignItems(VerticalAlign.Center)
-                    .justifyContent(FlexAlign.Center)
-                    .height(60)
-                    .margin({ top: 10, bottom: 10 })
-
                 }
             }
-            .tabBar($r("app.string.tab_files"))
+            .tabBar(SubTabBarStyle.of($r("app.string.tab_files"))
+                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
+                .board({ borderRadius: 0 })
+            )
+
 
             TabContent() {
-                UploadPage()
+                UploadPage({ account: this.account })
                     .width('100%')
                     .height('100%')
             }
-            .tabBar($r('app.string.tab_upload'))
+            .tabBar(SubTabBarStyle.of($r('app.string.tab_upload'))
+                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
+                .board({ borderRadius: 0 })
+            )
 
             TabContent() {
-                SettingsPage()
+                TransferProgress()
                     .width('100%')
                     .height('100%')
             }
-            .tabBar($r('app.string.tab_settings'))
+            .tabBar(SubTabBarStyle.of('Transfer')
+                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
+                .board({ borderRadius: 0 })
+            )
+
+            TabContent() {
+                SettingsPage({ currentAccount: this.account })
+                    .width('100%')
+                    .height('100%')
+            }
+            .tabBar(SubTabBarStyle.of($r('app.string.tab_settings'))
+                .labelStyle({ selectedColor: 'white', unselectedColor: 'white' })
+                .board({ borderRadius: 0 })
+            )
         }
         .onChange((index: number) => {
             this.currentIndex = index;
@@ -128,6 +143,10 @@ struct Index {
         .width('100%')
         .height('100%')
         .scrollable(false)
+        .linearGradient({
+            angle: 45,
+            colors: [[0x0082C9, 0], [0x1CAFFF, 1]]
+        })
     }
 
     @Builder

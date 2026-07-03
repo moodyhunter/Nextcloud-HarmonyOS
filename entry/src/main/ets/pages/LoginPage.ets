@@ -1,64 +1,52 @@
-import { LoginProcess, NCommon } from 'nextcloud';
-import { LengthMetrics, promptAction } from '@kit.ArkUI';
-import { Logger } from 'nextcloud/src/main/ets/Logger';
+import { Logger, LoginFlow, Nextcloud } from 'nextcloud';
+import { LengthMetrics } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
+import { ShowAlertDialog, ShowToast } from '../utils/Utils';
 
-const TAG = 'pages/LoginPage'
+const TAG = 'Pages/LoginPage';
 
-@Preview
-@Component
+@ComponentV2
 export struct LoginPage {
-    @Link public dialogId: number;
+    @Require @Param public dialogId: number;
     private webController: webview.WebviewController = new webview.WebviewController();
-    private loginProcess = new LoginProcess();
-    @State private loginStarted: boolean = false;
+    private loginFlow = new LoginFlow();
+    @Local private hostname: string = '';
+    @Local private loginStarted: boolean = false;
 
-    async doLogin() {
-        if (!this.loginProcess.hasAppPassword()) {
-            Logger.Debug(TAG, "No app password, start login process");
-            try {
-                await webview.WebCookieManager.clearAllCookies();
-                let initResult = await this.loginProcess.initLogin();
-                if (!initResult.success) {
-                    Logger.Error(TAG, `Login failed: ${initResult.errorMsg}`);
-                    this.getUIContext().showAlertDialog({
-                        title: "Login Failed",
-                        message: `Login failed with domain: '${NCommon.Preference.hostname}', ${initResult.errorMsg}`,
-                    });
-                    return;
-                }
+    async doLogin(): Promise<void> {
+        await webview.WebCookieManager.clearAllCookies();
+        let initResult = await this.loginFlow.initLogin(this.hostname);
+        if (initResult.kind === 'error') {
+            Logger.Error(TAG, `Login failed: ${initResult.error}`);
+            ShowAlertDialog(this.getUIContext(), "Login Failed", `Login failed with domain: '${this.hostname}', ${initResult.error}`);
+            return;
+        }
 
-                this.loginStarted = true;
-                this.webController.loadUrl(initResult.loginUrl);
-                Logger.Info(TAG, "Successfully opened login url");
+        this.startUserLoginProcess(initResult.data);
 
-                let result = await this.loginProcess.loginPollRepeatedly();
-                Logger.Info(TAG, "Login result: " + JSON.stringify(result));
-
-                if (result.cancelled) {
-                    this.getUIContext().showAlertDialog({
-                        title: "Login Failed",
-                        message: "Operation Cancelled",
-                    });
-                } else {
-                    this.getUIContext().showAlertDialog({
-                        title: "Welcome to use NextCloud",
-                        message: "Welcome, " + result.loginName,
-                    });
-                    this.closeDialog();
-                }
-            } catch (e) {
-                this.getUIContext().showAlertDialog({
-                    title: "Login failed",
-                    message: JSON.stringify(e),
-                })
+        let loginResult = await this.loginFlow.loginPollRepeatedly();
+        switch (loginResult.kind) {
+            case 'ok': {
+                await Nextcloud.addAccount(loginResult.account);
+                ShowAlertDialog(this.getUIContext(), "Login Successful", `Welcome, ${loginResult.account.username}!`);
+                this.closeDialog();
+                break;
             }
-        } else {
-            Logger.Info(TAG, "Already have app password, skip login process");
-            this.getUIContext().showAlertDialog({
-                title: "Welcome",
-                message: NCommon.Preference.username,
-            });
+            case 'cancelled': {
+                ShowAlertDialog(this.getUIContext(), "Login Failed", "Operation Cancelled");
+                break;
+            }
+        }
+    }
+
+    startUserLoginProcess(loginUrl: string) {
+        try {
+            this.webController.loadUrl(loginUrl);
+            Logger.Info(TAG, "Successfully opened login url");
+            this.loginStarted = true;
+        } catch (error) {
+            ShowAlertDialog(this.getUIContext(), "Login Failed", `Failed to open login url: ${JSON.stringify(error)}`);
+            Logger.Error(TAG, `Failed to open login url: ${JSON.stringify(error)}`);
         }
     }
 
@@ -80,13 +68,9 @@ export struct LoginPage {
                     .backgroundColor(Color.Red)
                     .height(32)
                     .onClick(() => {
-                        this.loginProcess.cancelPolling();
+                        this.loginFlow.cancelPolling();
                         this.loginStarted = false;
-                        NCommon.Preference.password = "";
-                        this.getUIContext().getPromptAction().showToast({
-                            message: "Logged out",
-                            duration: 2000,
-                        });
+                        ShowToast(this.getUIContext(), "Cancelled", 2000);
                     })
                     .alignRules({
                         left: { anchor: '__container__', align: HorizontalAlign.Start },
@@ -125,11 +109,9 @@ export struct LoginPage {
             if (!this.loginStarted) {
                 Text('Type the URL of your Nextcloud instance:')
                     .margin({ left: 24, right: 24, bottom: 8 })
+
                 Flex({ alignItems: ItemAlign.Center, direction: FlexDirection.Row, space: { main: LengthMetrics.vp(8) } }) {
-                    TextInput({ placeholder: 'https://nextcloud.com', text: NCommon.Preference.hostname })
-                        .onChange((value: string) => {
-                            NCommon.Preference.hostname = value;
-                        })
+                    TextInput({ placeholder: 'https://nextcloud.com', text: this.hostname!! })
                         .flexGrow(1)
 
                     Button({ type: ButtonType.Circle }) {
@@ -160,5 +142,18 @@ export struct LoginPage {
     private closeDialog() {
         Logger.Info(TAG, `dialogId: ${this.dialogId}`);
         this.getUIContext().getPromptAction().closeCustomDialog(this.dialogId);
+    }
+}
+
+
+@Preview
+@Component
+struct LoginPagePreview {
+    @State private dialogId: number = 0;
+
+    build() {
+        LoginPage({ dialogId: this.dialogId })
+            .width(300)
+            .height(500)
     }
 }

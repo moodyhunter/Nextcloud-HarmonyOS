@@ -1,4 +1,4 @@
-import { BasicDataSource } from 'nextcloud';
+import { BasicDataSource } from '../Utils/BasicDatasource';
 import { PhotoItem } from './PhotoItem';
 
 
@@ -7,9 +7,12 @@ export class ImageListDataSource extends BasicDataSource<PhotoItem> {
         super();
     }
 
+    public prependAsset(asset: PhotoItem) {
+        this.prependItem(asset);
+    }
+
     public addAsset(asset: PhotoItem) {
-        this.entries.push(asset);
-        this.notifyDataAdd(this.entries.length - 1);
+        this.appendItem(asset);
     }
 
     public addWithoutNotify(asset: PhotoItem) {

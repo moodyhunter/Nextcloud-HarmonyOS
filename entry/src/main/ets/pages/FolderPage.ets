@@ -1,19 +1,18 @@
-import { DirectoryEntry, FilesDataSource, Logger, NCommon } from 'nextcloud';
+import { Account, DirectoryEntry, FilesDataSource, Logger } from 'nextcloud';
 import { Path } from '../utils/Path';
 import { PREVIEW_PAGE_NAME, PreviewPageProps } from './PreviewPage';
-import { LengthMetrics, promptAction } from '@kit.ArkUI';
+import { LengthMetrics } from '@kit.ArkUI';
 import { FormatBytes } from '../utils/Utils';
-import { Constants, FolderViewMode } from '../utils/Common';
 
 const TAG = "Page-FolderPage";
 
 export let FOLDER_PAGE_NAME: string = "FolderPage";
 
-@Component
+@ComponentV2
 export struct FolderPage {
-    @StorageLink(Constants.VIEW_MODE_KEY) viewMode: FolderViewMode = FolderViewMode.TwoColumns;
-    @Consume('FolderList.PathStack') pageInfos: NavPathStack;
-    @Prop currentPath: Path;
+    @Require @Param account: Account;
+    @Require @Param currentPath: Path;
+    @Consumer('FolderList.PathStack') pageInfos: NavPathStack = new NavPathStack();
 
     static formatSubtitle(mime: string, size: string) {
         let mimeParts = mime.split('/');
@@ -24,15 +23,27 @@ export struct FolderPage {
         let pathInfo: NavPathInfo;
         Logger.Info(TAG, JSON.stringify(entry));
         if (entry.isDirectory) {
-            pathInfo = new NavPathInfo(FOLDER_PAGE_NAME, this.currentPath.getChild(entry.name));
+            let props: FolderPageProps = {
+                account: this.account,
+                currentPath: this.currentPath.getChild(entry.name),
+            };
+            pathInfo = new NavPathInfo(FOLDER_PAGE_NAME, props);
         } else if (entry.has_preview) {
-            let props: PreviewPageProps = { entry: entry, fullPath: this.currentPath.getChild(entry.name) };
+            let props: PreviewPageProps = {
+                account: this.account,
+                entry: entry,
+                fullPath: this.currentPath.getChild(entry.name),
+            };
             pathInfo = new NavPathInfo(PREVIEW_PAGE_NAME, props);
         } else {
-            promptAction.showToast({
-                message: `No preview available for ${entry.name}`,
-                duration: 2000,
-            });
+            try {
+                this.getUIContext().getPromptAction().showToast({
+                    message: `No preview available for ${entry.name}`,
+                    duration: 2000,
+                });
+            } catch (error) {
+                Logger.Error(TAG, `Failed to show toast: ${JSON.stringify(error)}`);
+            }
 
             return;
         }
@@ -91,12 +102,12 @@ export struct FolderPage {
     build() {
         NavDestination() {
             List({ space: 5 }) {
-                LazyForEach(new FilesDataSource(this.currentPath.path()), (d: DirectoryEntry) => {
+                LazyForEach(new FilesDataSource(this.account, this.currentPath.path()), (d: DirectoryEntry) => {
                     ListItem() {
                         Button({ type: ButtonType.Normal }) {
                             Row() {
                                 if (d.has_preview) {
-                                    Image(NCommon.MakePreviewUrl(d.fileId))
+                                    Image(this.account.getPreviewUrl(d.fileId))
                                         .width(32)
                                         .height(32)
                                         .margin({ right: 10 })
@@ -121,10 +132,10 @@ export struct FolderPage {
                                         .fontStyle(FontStyle.Italic)
                                 }
                                 .alignItems(HorizontalAlign.Start)
-                                .width(this.viewMode == 1 ? '75%' : '70%')
+                                .width('70%')
                             }
                         }
-                        .backgroundColor('#00000000')
+                        .backgroundColor(Color.Transparent)
                         .borderRadius(0)
                         .onClick(async () => {
                             await this.onItemClicked(d);
@@ -136,7 +147,7 @@ export struct FolderPage {
                 })
             }
             .fadingEdge(true, { fadingEdgeLength: LengthMetrics.vp(80) })
-            .lanes(this.viewMode)
+            .lanes(2)
             .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
             .width('auto')
             .height('auto')
@@ -147,7 +158,12 @@ export struct FolderPage {
     }
 }
 
+export interface FolderPageProps {
+    account: Account;
+    currentPath: Path;
+}
+
 @Builder
-export function FolderPageBuilder(_name: string, currentPath: Path) {
-    FolderPage({ currentPath });
+export function FolderPageBuilder(_name: string, props: FolderPageProps) {
+    FolderPage({ account: props.account, currentPath: props.currentPath });
 }

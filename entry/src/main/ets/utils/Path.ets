@@ -1,4 +1,4 @@
-import { Logger } from "nextcloud";
+import { Logger } from 'nextcloud';
 
 const TAG = "Util-Path";
 
